@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LLM Lite Frontend</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=Space+Grotesk:wght@500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css"
+    />
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="bg-orbit"></div>
+    <div class="app">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <img class="brand-logo" src="resources/logo.png" alt="Logo" />
+          <div class="brand-text">
+            <div class="brand-title">LLM Lite</div>
+            <div class="brand-subtitle">Frontend Desk</div>
+          </div>
+        </div>
+        <div class="user-card">
+          <div class="user-header">
+            <div class="user-label">User</div>
+            <button class="icon-button" id="hideSidebarBtn" type="button" aria-label="Hide sidebar">
+              <img src="resources/hide.svg" alt="" />
+            </button>
+          </div>
+          <div class="user-id" id="userId">guest</div>
+          <button class="ghost-button" id="settingsBtn" type="button">
+            Settings
+          </button>
+        </div>
+        <button class="primary-button" id="newChatBtn" type="button">
+          New Chat
+        </button>
+        <div class="history">
+          <div class="history-title">History</div>
+          <div class="history-list" id="historyList"></div>
+        </div>
+      </aside>
+      <main class="chat" id="chatMain">
+        <header class="chat-header">
+          <button class="ghost-button menu-button" id="menuBtn" type="button">
+            Menu
+          </button>
+          <div class="chat-title">Conversation</div>
+          <div class="status" id="statusText">Ready</div>
+        </header>
+        <section class="chat-body">
+          <div class="chat-history" id="chatHistory"></div>
+          <form class="chat-input" id="chatForm">
+            <textarea
+              id="promptInput"
+              placeholder="Ask something..."
+              rows="2"
+            ></textarea>
+            <button class="send-button" type="submit">Send</button>
+          </form>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <!--
+    <div class="modal" id="loginModal" hidden>
+      <div class="modal-card">
+        <div class="modal-title">Sign in</div>
+        <p class="modal-subtitle">Use your account to start chatting.</p>
+        <form id="loginForm">
+          <label class="field">
+            <span>Username</span>
+            <input id="loginUsername" type="text" required />
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input id="loginPassword" type="password" required />
+          </label>
+          <button class="primary-button" type="submit">Sign in</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal" id="settingsModal" hidden>
+      <div class="modal-card">
+        <div class="modal-title">Settings</div>
+        <p class="modal-subtitle">Configure API endpoint and cache.</p>
+        <form id="settingsForm">
+          <label class="field">
+            <span>API Base URL</span>
+            <input id="apiBaseUrl" type="text" placeholder="http://localhost:4587" />
+          </label>
+          <div class="button-row">
+            <button class="primary-button" type="submit">Save</button>
+            <button class="ghost-button" id="clearCacheBtn" type="button">
+              Clear History Cache
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    -->
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js"></script>
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/katex/dist/contrib/auto-render.min.js"
+    ></script>
+    <script defer src="src/app.js"></script>
+  </body>
+</html>

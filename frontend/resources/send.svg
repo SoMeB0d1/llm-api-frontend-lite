@@ -1,0 +1,16 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- 白色箭头 -->
+  <path
+    d="M32 14
+       L20 26
+       L24 30
+       L29 25
+       L29 50
+       L35 50
+       L35 25
+       L40 30
+       L44 26
+       Z"
+    fill="#FFFFFF"
+  />
+</svg>

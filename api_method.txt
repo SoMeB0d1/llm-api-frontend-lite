@@ -1,0 +1,38 @@
+LLM API (draft)
+
+Base URL
+- Use API_BASE_URL from .env during local dev. Default in frontend is http://localhost:4587 if not overridden.
+
+Auth: username/password login
+- POST /auth/login
+  Request JSON: {"username":"string","password":"string"}
+  Response JSON: {"token":"string","refreshToken":"string","userId":"string","expiresAt":"ISO-8601"}
+  Frontend: Login modal submits here, stores tokens in localStorage.
+
+Auth: token validate
+- POST /auth/validate
+  Request JSON: {"token":"string"}
+  Response JSON: {"valid":true,"token":"string?","refreshToken":"string?","expiresAt":"ISO-8601?"}
+  Frontend: On load, validates cached token and refreshes storage if new tokens returned.
+
+Auth: token refresh
+- POST /auth/refresh
+  Request JSON: {"refreshToken":"string"}
+  Response JSON: {"token":"string","refreshToken":"string","expiresAt":"ISO-8601"}
+  Frontend: Called after 401 or validate failure when refreshToken exists.
+
+Prompt/Answer
+- POST /chat
+  Request JSON: {"prompt":"string"}
+  Response JSON: {"answer":"string","historyId":"string?"}
+  Frontend: Sends user prompt, renders assistant message with Markdown and LaTeX.
+
+History list (summary only)
+- GET /history
+  Response JSON: {"items":[{"id":"string","summary":"string","updatedAt":"ISO-8601"}]}
+  Frontend: Loads cached history from localStorage first, then updates from API.
+
+Notes
+- All responses are expected as JSON with HTTP 2xx on success.
+- On 401, frontend attempts token refresh once, then shows login modal.
+- Frontend uses fetch with a 20s timeout (API_TIMEOUT_MS).

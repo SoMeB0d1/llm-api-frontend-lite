@@ -1,0 +1,31 @@
+<svg width="64" height="64"
+     viewBox="0 0 64 64"
+     xmlns="http://www.w3.org/2000/svg">
+
+  <!-- 后面的圆角矩形 -->
+  <rect
+    x="24"
+    y="12"
+    width="28"
+    height="28"
+    rx="6"
+    ry="6"
+    fill="#FFFFFF"
+    stroke="#000000"
+    stroke-width="3"
+  />
+
+  <!-- 前面的圆角矩形 -->
+  <rect
+    x="12"
+    y="24"
+    width="28"
+    height="28"
+    rx="6"
+    ry="6"
+    fill="#FFFFFF"
+    stroke="#000000"
+    stroke-width="3"
+  />
+
+</svg>
