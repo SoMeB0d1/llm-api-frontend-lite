@@ -12,6 +12,7 @@
   --radius-lg: 22px;
   --radius-md: 16px;
   --sidebar-width: 240px;
+  --sidebar-collapsed-width: 72px;
 }
 
 * {
@@ -73,7 +74,8 @@ body {
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
   min-width: var(--sidebar-width);
-  transition: transform 0.4s ease, opacity 0.4s ease;
+  transition: transform 0.4s ease, opacity 0.4s ease, width 0.4s ease,
+    padding 0.4s ease;
 }
 
 .app.sidebar-hidden {
@@ -83,6 +85,10 @@ body {
 .app.sidebar-hidden .sidebar {
   transform: translateX(-120%);
   opacity: 0;
+  pointer-events: none;
+}
+
+.app.sidebar-animating .sidebar {
   pointer-events: none;
 }
 
@@ -164,6 +170,17 @@ body {
   background: linear-gradient(120deg, #000aaa, #2b78d6);
   color: #ffffff;
   border-color: transparent;
+}
+
+.primary-button:disabled,
+.send-button:disabled,
+.ghost-button:disabled,
+.icon-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+  background: #dfe8f5;
+  color: #7a8aa3;
 }
 
 .ghost-button {
@@ -272,9 +289,6 @@ body {
   display: none;
 }
 
-.app.sidebar-hidden .menu-button {
-  display: inline-flex;
-}
 
 .chat-body {
   display: grid;
@@ -444,6 +458,10 @@ body {
     padding: 18px;
   }
 
+  .app.sidebar-hidden {
+    grid-template-columns: 1fr;
+  }
+
   .sidebar {
     position: fixed;
     inset: 18px auto 18px 18px;
@@ -459,10 +477,53 @@ body {
   .menu-button {
     display: inline-flex;
   }
+
+  .app.sidebar-open .menu-button {
+    display: none;
+  }
 }
 
 @media (min-width: 800px) and (max-width: 1199px) {
   :root {
     --sidebar-width: 240px;
+  }
+}
+
+@media (min-width: 800px) {
+  .app.sidebar-collapsed {
+    grid-template-columns: var(--sidebar-collapsed-width) 1fr;
+  }
+
+  .app.sidebar-collapsed .sidebar {
+    width: var(--sidebar-collapsed-width);
+    min-width: var(--sidebar-collapsed-width);
+    padding: 16px 10px;
+    gap: 12px;
+  }
+
+  .app.sidebar-collapsed-ready .brand-text,
+  .app.sidebar-collapsed-ready .history,
+  .app.sidebar-collapsed-ready #newChatBtn,
+  .app.sidebar-collapsed-ready .user-label,
+  .app.sidebar-collapsed-ready .user-id,
+  .app.sidebar-collapsed-ready #settingsBtn {
+    display: none;
+  }
+
+  .app.sidebar-collapsed .brand {
+    order: 0;
+  }
+
+  .app.sidebar-collapsed .user-card {
+    order: 1;
+    margin-top: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
+  .app.sidebar-collapsed .user-header {
+    grid-template-columns: auto;
+    justify-items: center;
   }
 }

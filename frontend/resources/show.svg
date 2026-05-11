@@ -1,0 +1,19 @@
+<svg width="64" height="64"
+     viewBox="0 0 64 64"
+     xmlns="http://www.w3.org/2000/svg">
+
+  <g
+    fill="none"
+    stroke="#000000"
+    stroke-width="5"
+    stroke-linecap="round"
+    stroke-linejoin="round">
+
+    <!-- 上线 -->
+    <path d="M24 16 L40 32" />
+
+    <!-- 下线 -->
+    <path d="M24 48 L40 32" />
+
+  </g>
+</svg>
