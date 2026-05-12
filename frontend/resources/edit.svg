@@ -1,0 +1,21 @@
+<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" fill="white" />
+  
+  <path d="
+    M 89.26,310.74 
+    L 185.86,284.85 
+    L 284.85,185.86 
+    A 50,50 0 0 0 214.14,115.15 
+    L 115.15,214.14 
+    Z" 
+    fill="none" stroke="black" stroke-width="10" />
+
+  <line x1="214.14" y1="115.15" x2="284.85" y2="185.86" stroke="black" stroke-width="10" />
+
+  <line x1="89.26" y1="310.74" x2="115.15" y2="214.14" stroke="black" stroke-width="10" />
+  
+  <!-- <g fill="gray" font-size="12" font-family="sans-serif">
+    <text x="210" y="100">半圆弧</text>
+    <text x="60" y="330">等边三角形</text>
+  </g> -->
+</svg>

@@ -2,10 +2,8 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"log"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -50,25 +48,6 @@ func mustGetEnv(key string) string {
 	return value
 }
 
-func newProxy(target *url.URL, apiKey string) *httputil.ReverseProxy {
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	originalDirector := proxy.Director
-
-	proxy.Director = func(req *http.Request) {
-		originalDirector(req)
-		req.Host = target.Host
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
-	}
-
-	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadGateway)
-		_, _ = w.Write([]byte(fmt.Sprintf(`{"error":"upstream_error","message":"%s"}`, err.Error())))
-	}
-
-	return proxy
-}
-
 func main() {
 	loadEnvFromFile()
 
@@ -85,6 +64,7 @@ func main() {
 	}
 
 	proxy := newProxy(target, apiKey)
+	upstreamBase := strings.TrimRight(targetRaw, "/")
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -92,6 +72,7 @@ func main() {
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
 
+	mux.Handle("/chat", withCORS(handleChat(upstreamBase, apiKey)))
 	mux.Handle("/v1/", withCORS(proxy))
 	mux.Handle("/v1", withCORS(proxy))
 

@@ -1,14 +1,21 @@
 const state = {
-  baseUrl: "http://localhost:4587",
+  baseUrl: "",
   token: "",
   refreshToken: "",
   userId: "guest",
+  topicId: "",
+  model: "deepseek-v4-flash",
   history: [],
 };
 
 const SIDEBAR_ICONS = {
   hide: "resources/hide.svg",
   show: "resources/show.svg",
+};
+
+const SEND_ICONS = {
+  send: "resources/send.svg",
+  loading: "resources/loading.svg",
 };
 
 const elements = {
@@ -23,6 +30,7 @@ const elements = {
   chatHistory: document.getElementById("chatHistory"),
   chatForm: document.getElementById("chatForm"),
   promptInput: document.getElementById("promptInput"),
+  sendBtn: document.getElementById("sendBtn"),
   statusText: document.getElementById("statusText"),
   userId: document.getElementById("userId"),
   toast: document.getElementById("toast"),
@@ -44,8 +52,23 @@ const STORAGE_KEYS = {
   history: "llm.history",
 };
 
+function newTopicId() {
+  return `topic-${Date.now()}`;
+}
+
 function setStatus(text) {
   elements.statusText.textContent = text;
+}
+
+function setSendButtonState(loading) {
+  if (!elements.sendBtn) {
+    return;
+  }
+  const icon = elements.sendBtn.querySelector("img");
+  if (icon) {
+    icon.src = loading ? SEND_ICONS.loading : SEND_ICONS.send;
+  }
+  elements.sendBtn.disabled = loading;
 }
 
 function isMobile() {
@@ -188,6 +211,30 @@ function showToast(message) {
   }, 1800);
 }
 
+async function copyToClipboard(text) {
+  if (!text) {
+    return;
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "absolute";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    showToast("已复制");
+  } catch (error) {
+    showToast("复制失败");
+  }
+}
+
 function loadStoredState() {
   state.token = localStorage.getItem(STORAGE_KEYS.token) || "";
   state.refreshToken = localStorage.getItem(STORAGE_KEYS.refresh) || "";
@@ -202,6 +249,7 @@ function loadStoredState() {
       state.history = [];
     }
   }
+  state.topicId = newTopicId();
 }
 
 function saveAuth() {
@@ -257,16 +305,46 @@ function renderMarkdown(text) {
     .replace(/\n/g, "<br>");
 }
 
+function createActionButton(icon, label, onClick) {
+  const button = document.createElement("button");
+  button.className = "action-button";
+  button.type = "button";
+  button.setAttribute("aria-label", label);
+  const img = document.createElement("img");
+  img.src = icon;
+  img.alt = "";
+  button.appendChild(img);
+  if (onClick) {
+    button.addEventListener("click", onClick);
+  }
+  return button;
+}
+
 function renderMessage(role, content) {
   const wrapper = document.createElement("div");
   wrapper.className = `message ${role}`;
+  wrapper.dataset.raw = content;
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   bubble.innerHTML = renderMarkdown(content);
+  bubble.dataset.raw = content;
   const meta = document.createElement("div");
   meta.className = "message-meta";
   meta.textContent = role === "user" ? "You" : "Assistant";
+  const actions = document.createElement("div");
+  actions.className = "message-actions";
+  const copyBtn = createActionButton("resources/copy.svg", "Copy message", () => {
+    copyToClipboard(wrapper.dataset.raw || "");
+  });
+  if (role === "user") {
+    const editBtn = createActionButton("resources/edit.svg", "Edit message");
+    actions.append(copyBtn, editBtn);
+  } else {
+    const retryBtn = createActionButton("resources/retry.svg", "Retry message");
+    actions.append(copyBtn, retryBtn);
+  }
   wrapper.appendChild(bubble);
+  wrapper.appendChild(actions);
   wrapper.appendChild(meta);
   elements.chatHistory.appendChild(wrapper);
   if (window.renderMathInElement) {
@@ -398,7 +476,12 @@ async function sendPrompt(prompt) {
   setStatus("Thinking...");
   const response = await apiFetch("/chat", {
     method: "POST",
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({
+      userId: state.userId,
+      topicId: state.topicId,
+      model: state.model,
+      message: prompt,
+    }),
   });
   setStatus("Ready");
   return response.answer || "(no response)";
@@ -406,6 +489,7 @@ async function sendPrompt(prompt) {
 
 function resetChat() {
   elements.chatHistory.innerHTML = "";
+  state.topicId = newTopicId();
 }
 
 function initEvents() {
@@ -456,6 +540,24 @@ function initEvents() {
     elements.newChatBtn.addEventListener("click", () => {
       resetChat();
       setStatus("Ready");
+    });
+  }
+
+  if (elements.promptInput && elements.chatForm) {
+    elements.promptInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        if (elements.sendBtn && elements.sendBtn.disabled) {
+          return;
+        }
+        if (typeof elements.chatForm.requestSubmit === "function") {
+          elements.chatForm.requestSubmit();
+        } else {
+          elements.chatForm.dispatchEvent(
+            new Event("submit", { cancelable: true, bubbles: true })
+          );
+        }
+      }
     });
   }
 
@@ -530,12 +632,18 @@ function initEvents() {
       showToast("输入内容不能为空");
       return;
     }
+    setSendButtonState(true);
     renderMessage("user", prompt);
     elements.promptInput.value = "";
     const placeholder = renderMessage("assistant", "...");
     try {
       const answer = await sendPrompt(prompt);
       placeholder.innerHTML = renderMarkdown(answer);
+      placeholder.dataset.raw = answer;
+      const placeholderWrapper = placeholder.closest(".message");
+      if (placeholderWrapper) {
+        placeholderWrapper.dataset.raw = answer;
+      }
       if (window.renderMathInElement) {
         window.renderMathInElement(placeholder, {
           delimiters: [
@@ -547,6 +655,8 @@ function initEvents() {
     } catch (error) {
       placeholder.textContent = "Request failed.";
       setStatus("Request failed");
+    } finally {
+      setSendButtonState(false);
     }
   });
 }
