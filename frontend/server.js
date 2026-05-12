@@ -48,8 +48,15 @@ async function readRawBody(req) {
 
 function safePath(urlPath) {
   const cleaned = urlPath.split("?")[0];
-  const relative = cleaned === "/" ? "/index.html" : cleaned;
-  const decoded = decodeURIComponent(relative);
+  let relative = cleaned === "/" ? "/token_check/token_check.html" : cleaned;
+  if (cleaned === "/login" || cleaned === "/login/") {
+    relative = "/login/login.html";
+  }
+  if (cleaned === "/token_check" || cleaned === "/token_check/") {
+    relative = "/token_check/token_check.html";
+  }
+  const withIndex = relative.endsWith("/") ? `${relative}index.html` : relative;
+  const decoded = decodeURIComponent(withIndex);
   const resolved = path.normalize(path.join(publicDir, decoded));
   if (!resolved.startsWith(publicDir)) {
     return null;

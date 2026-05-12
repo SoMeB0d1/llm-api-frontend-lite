@@ -650,21 +650,29 @@ async function validateToken() {
     return false;
   }
   try {
-    const data = await apiFetch("/auth/validate", {
+    const response = await fetch(`${state.baseUrl}/auth/token`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: state.token }),
     });
-    if (data.valid === false) {
+    const text = await response.text();
+    let data = {};
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (error) {
+        data = {};
+      }
+    }
+    if (!response.ok || data.token_valid !== true) {
       return false;
     }
-    if (data.token) {
-      state.token = data.token;
+    if (data.new_token) {
+      state.token = data.new_token;
     }
-    if (data.refreshToken) {
-      state.refreshToken = data.refreshToken;
-    }
-    if (data.userId) {
-      setUserId(data.userId);
+    const resolvedUserId = data.user_ID || data.user_name || state.userId;
+    if (resolvedUserId) {
+      setUserId(resolvedUserId);
     }
     saveAuth();
     return true;
@@ -917,16 +925,13 @@ async function bootstrap() {
   setUserId(state.userId);
   setBaseUrl(state.baseUrl);
   initEvents();
-  seedTestConversation();
-  const hasLoginUI = Boolean(elements.loginModal && elements.loginForm);
-  if (await validateToken()) {
-    toggleModal(elements.loginModal, false);
+  const isValid = await validateToken();
+  if (isValid) {
+    seedTestConversation();
     loadHistory();
-  } else if (hasLoginUI) {
-    toggleModal(elements.loginModal, true);
-  } else {
-    loadHistory();
+    return;
   }
+  window.location.href = "/login/login.html";
 }
 
 bootstrap();

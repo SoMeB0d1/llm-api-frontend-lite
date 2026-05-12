@@ -66,6 +66,11 @@ func main() {
 	proxy := newProxy(target, apiKey)
 	upstreamBase := strings.TrimRight(targetRaw, "/")
 
+	store, err := openLoginStore()
+	if err != nil {
+		log.Printf("login db init failed: %v", err)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -73,12 +78,13 @@ func main() {
 	})
 
 	mux.Handle("/chat", withCORS(handleChat(upstreamBase, apiKey)))
+	mux.Handle("/auth/token", withCORS(handleAuthToken(store)))
 	mux.Handle("/v1/", withCORS(proxy))
 	mux.Handle("/v1", withCORS(proxy))
 
 	addr := ":" + port
 	log.Printf("Go proxy listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, logRequests(mux)); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -91,6 +97,15 @@ func withCORS(next http.Handler) http.Handler {
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func logRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodPost {
+			log.Printf("request %s %s", r.Method, r.URL.Path)
 		}
 		next.ServeHTTP(w, r)
 	})

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -15,6 +16,7 @@ func newProxy(target *url.URL, apiKey string) *httputil.ReverseProxy {
 		originalDirector(req)
 		req.Host = target.Host
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+		log.Printf("proxy %s %s", req.Method, req.URL.String())
 	}
 
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
