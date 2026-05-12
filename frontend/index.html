@@ -53,7 +53,12 @@
             Menu
           </button>
           <div class="chat-title">Conversation</div>
-          <div class="status" id="statusText">Ready</div>
+          <div class="chat-tools">
+            <select class="model-select" id="modelSelect" aria-label="Model">
+              <option value="deepseek-v4-flash">deepseek-v4-flash</option>
+            </select>
+            <div class="status" id="statusText">Ready</div>
+          </div>
         </header>
         <section class="chat-body">
           <div class="chat-history" id="chatHistory"></div>

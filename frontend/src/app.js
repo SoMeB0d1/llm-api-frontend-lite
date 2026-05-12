@@ -5,6 +5,7 @@ const state = {
   userId: "guest",
   topicId: "",
   model: "deepseek-v4-flash",
+  isNewChat: true,
   history: [],
 };
 
@@ -31,6 +32,7 @@ const elements = {
   chatForm: document.getElementById("chatForm"),
   promptInput: document.getElementById("promptInput"),
   sendBtn: document.getElementById("sendBtn"),
+  modelSelect: document.getElementById("modelSelect"),
   statusText: document.getElementById("statusText"),
   userId: document.getElementById("userId"),
   toast: document.getElementById("toast"),
@@ -58,6 +60,13 @@ function newTopicId() {
 
 function setStatus(text) {
   elements.statusText.textContent = text;
+}
+
+function setNewChatState(isNew) {
+  state.isNewChat = isNew;
+  if (elements.modelSelect) {
+    elements.modelSelect.disabled = !isNew;
+  }
 }
 
 function setSendButtonState(loading) {
@@ -199,11 +208,15 @@ function hideSidebarMobile() {
   });
 }
 
-function showToast(message) {
+function showToast(message, variant = "error") {
   if (!elements.toast) {
     return;
   }
   elements.toast.textContent = message;
+  elements.toast.classList.remove("success");
+  if (variant === "success") {
+    elements.toast.classList.add("success");
+  }
   elements.toast.classList.add("show");
   window.clearTimeout(showToast.timeoutId);
   showToast.timeoutId = window.setTimeout(() => {
@@ -229,9 +242,99 @@ async function copyToClipboard(text) {
       document.execCommand("copy");
       document.body.removeChild(textarea);
     }
-    showToast("已复制");
+    showToast("已复制", "success");
   } catch (error) {
     showToast("复制失败");
+  }
+}
+
+function markActionDone(button) {
+  if (!button) {
+    return;
+  }
+  const img = button.querySelector("img");
+  if (!button.dataset.icon && img) {
+    button.dataset.icon = img.src;
+  }
+  button.disabled = true;
+  button.classList.add("action-button--done");
+  if (img) {
+    img.src = "resources/done.svg";
+  }
+  window.setTimeout(() => {
+    button.disabled = false;
+    button.classList.remove("action-button--done");
+    if (img && button.dataset.icon) {
+      img.src = button.dataset.icon;
+    }
+  }, 1000);
+}
+
+function setMessagePrompt(bubble, prompt) {
+  const wrapper = bubble?.closest(".message");
+  if (wrapper && prompt) {
+    wrapper.dataset.prompt = prompt;
+  }
+}
+
+function removeMessagesFrom(wrapper) {
+  if (!wrapper || !wrapper.parentElement) {
+    return;
+  }
+  let current = wrapper;
+  while (current) {
+    const next = current.nextElementSibling;
+    current.remove();
+    current = next;
+  }
+}
+
+function getRetryPrompt(wrapper) {
+  if (wrapper?.dataset.prompt) {
+    return wrapper.dataset.prompt;
+  }
+  let prev = wrapper?.previousElementSibling;
+  while (prev) {
+    if (prev.classList.contains("user")) {
+      return prev.dataset.raw || "";
+    }
+    prev = prev.previousElementSibling;
+  }
+  return "";
+}
+
+async function retryPrompt(wrapper) {
+  const prompt = getRetryPrompt(wrapper);
+  if (!prompt) {
+    showToast("无法重试该消息");
+    return;
+  }
+  removeMessagesFrom(wrapper);
+  setStatus("Thinking...");
+  setSendButtonState(true);
+  const placeholder = renderMessage("assistant", "...");
+  setMessagePrompt(placeholder, prompt);
+  try {
+    const answer = await sendPrompt(prompt);
+    placeholder.innerHTML = renderMarkdown(answer);
+    placeholder.dataset.raw = answer;
+    const placeholderWrapper = placeholder.closest(".message");
+    if (placeholderWrapper) {
+      placeholderWrapper.dataset.raw = answer;
+    }
+    if (window.renderMathInElement) {
+      window.renderMathInElement(placeholder, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "$", right: "$", display: false },
+        ],
+      });
+    }
+  } catch (error) {
+    placeholder.textContent = "Request failed.";
+    setStatus("Request failed");
+  } finally {
+    setSendButtonState(false);
   }
 }
 
@@ -250,6 +353,7 @@ function loadStoredState() {
     }
   }
   state.topicId = newTopicId();
+  setNewChatState(true);
 }
 
 function saveAuth() {
@@ -310,12 +414,13 @@ function createActionButton(icon, label, onClick) {
   button.className = "action-button";
   button.type = "button";
   button.setAttribute("aria-label", label);
+  button.dataset.icon = icon;
   const img = document.createElement("img");
   img.src = icon;
   img.alt = "";
   button.appendChild(img);
   if (onClick) {
-    button.addEventListener("click", onClick);
+    button.addEventListener("click", (event) => onClick(event, button));
   }
   return button;
 }
@@ -333,14 +438,25 @@ function renderMessage(role, content) {
   meta.textContent = role === "user" ? "You" : "Assistant";
   const actions = document.createElement("div");
   actions.className = "message-actions";
-  const copyBtn = createActionButton("resources/copy.svg", "Copy message", () => {
-    copyToClipboard(wrapper.dataset.raw || "");
-  });
+  const copyBtn = createActionButton(
+    "resources/copy.svg",
+    "Copy message",
+    (_event, button) => {
+      markActionDone(button);
+      copyToClipboard(wrapper.dataset.raw || "");
+    }
+  );
   if (role === "user") {
-    const editBtn = createActionButton("resources/edit.svg", "Edit message");
-    actions.append(copyBtn, editBtn);
+    actions.append(copyBtn);
   } else {
-    const retryBtn = createActionButton("resources/retry.svg", "Retry message");
+    const retryBtn = createActionButton(
+      "resources/retry.svg",
+      "Retry message",
+      (_event, button) => {
+        markActionDone(button);
+        retryPrompt(wrapper);
+      }
+    );
     actions.append(copyBtn, retryBtn);
   }
   wrapper.appendChild(bubble);
@@ -357,6 +473,45 @@ function renderMessage(role, content) {
   }
   elements.chatHistory.scrollTop = elements.chatHistory.scrollHeight;
   return bubble;
+}
+
+function seedTestConversation() {
+  if (!elements.chatHistory || elements.chatHistory.children.length) {
+    return;
+  }
+  const sample = [
+    {
+      role: "user",
+      content: "Summarize the following notes into bullet points.",
+    },
+    {
+      role: "assistant",
+      content:
+        "Here is a concise summary:\n\n- The project targets a lightweight UI with a fixed sidebar and scrollable chat history.\n- The backend uses a Go proxy to an OpenAI-compatible API.\n- Frontend state includes user ID, topic ID, and model selection.\n- Error handling should surface clearly in the header status.\n- UI controls include copy/edit/retry actions per message.",
+    },
+    {
+      role: "user",
+      content:
+        "Give me a quick plan for a weekend trip to a coastal city with food and museums.",
+    },
+    {
+      role: "assistant",
+      content:
+        "Weekend plan:\n\n**Day 1**\n- Morning: waterfront walk + local market breakfast.\n- Afternoon: city history museum, then coffee by the harbor.\n- Evening: seafood dinner, sunset lookout.\n\n**Day 2**\n- Morning: contemporary art museum.\n- Afternoon: beach time and a casual lunch.\n- Evening: food street crawl and a night ferry ride.",
+    },
+    {
+      role: "user",
+      content:
+        "Explain the difference between optimistic and pessimistic concurrency control with a quick example.",
+    },
+    {
+      role: "assistant",
+      content:
+        "Optimistic control assumes conflicts are rare and checks at commit time. Example: two users edit a record; the second save is rejected if the version changed.\n\nPessimistic control locks resources up front. Example: the first editor locks a row; the second must wait until the lock is released.",
+    },
+  ];
+  sample.forEach((item) => renderMessage(item.role, item.content));
+  setNewChatState(false);
 }
 
 function setUserId(id) {
@@ -394,9 +549,86 @@ async function apiFetch(path, options = {}) {
     }
   }
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+    let message = `HTTP ${response.status}`;
+    try {
+      const text = await response.text();
+      if (text) {
+        try {
+          const data = JSON.parse(text);
+          message = data.message || data.error || message;
+        } catch (error) {
+          message = text;
+        }
+      }
+    } catch (error) {
+      // Keep default message.
+    }
+    showToast(`请求失败: ${message}`);
+    throw new Error(message);
   }
   return response.json();
+}
+
+let lastModelFetchAt = 0;
+let modelFetchInFlight = false;
+
+function normalizeModelList(data) {
+  if (data && Array.isArray(data.data)) {
+    return data.data
+      .map((item) => item.id)
+      .filter((id) => typeof id === "string" && id.trim() !== "");
+  }
+  return [];
+}
+
+function applyModelOptions(models) {
+  if (!elements.modelSelect) {
+    return;
+  }
+  const current = state.model;
+  elements.modelSelect.innerHTML = "";
+  if (!models.length) {
+    const option = document.createElement("option");
+    option.value = current || "deepseek-v4-flash";
+    option.textContent = option.value;
+    elements.modelSelect.appendChild(option);
+    elements.modelSelect.value = option.value;
+    state.model = option.value;
+    return;
+  }
+  models.forEach((modelId) => {
+    const option = document.createElement("option");
+    option.value = modelId;
+    option.textContent = modelId;
+    elements.modelSelect.appendChild(option);
+  });
+  if (current && models.includes(current)) {
+    elements.modelSelect.value = current;
+  } else {
+    elements.modelSelect.value = models[0];
+    state.model = models[0];
+  }
+}
+
+async function fetchModelsIfAllowed() {
+  if (modelFetchInFlight) {
+    return;
+  }
+  const now = Date.now();
+  if (now - lastModelFetchAt < 1000) {
+    return;
+  }
+  lastModelFetchAt = now;
+  modelFetchInFlight = true;
+  try {
+    const data = await apiFetch("/v1/models", { method: "GET" });
+    const models = normalizeModelList(data);
+    applyModelOptions(models);
+  } catch (error) {
+    showToast("模型列表获取失败");
+  } finally {
+    modelFetchInFlight = false;
+  }
 }
 
 async function login(username, password) {
@@ -490,6 +722,7 @@ async function sendPrompt(prompt) {
 function resetChat() {
   elements.chatHistory.innerHTML = "";
   state.topicId = newTopicId();
+  setNewChatState(true);
 }
 
 function initEvents() {
@@ -625,6 +858,20 @@ function initEvents() {
     });
   }
 
+  if (elements.modelSelect) {
+    elements.modelSelect.addEventListener("change", () => {
+      state.model = elements.modelSelect.value;
+    });
+    const triggerFetch = () => {
+      if (!state.isNewChat) {
+        return;
+      }
+      fetchModelsIfAllowed();
+    };
+    elements.modelSelect.addEventListener("focus", triggerFetch);
+    elements.modelSelect.addEventListener("mousedown", triggerFetch);
+  }
+
   elements.chatForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const prompt = elements.promptInput.value.trim();
@@ -632,10 +879,14 @@ function initEvents() {
       showToast("输入内容不能为空");
       return;
     }
+    if (state.isNewChat) {
+      setNewChatState(false);
+    }
     setSendButtonState(true);
     renderMessage("user", prompt);
     elements.promptInput.value = "";
     const placeholder = renderMessage("assistant", "...");
+    setMessagePrompt(placeholder, prompt);
     try {
       const answer = await sendPrompt(prompt);
       placeholder.innerHTML = renderMarkdown(answer);
@@ -666,6 +917,7 @@ async function bootstrap() {
   setUserId(state.userId);
   setBaseUrl(state.baseUrl);
   initEvents();
+  seedTestConversation();
   const hasLoginUI = Boolean(elements.loginModal && elements.loginForm);
   if (await validateToken()) {
     toggleModal(elements.loginModal, false);

@@ -275,6 +275,29 @@ body {
   background: #f2f7ff;
 }
 
+.chat-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-self: end;
+}
+
+.model-select {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  background: #ffffff;
+  color: var(--ink);
+  min-width: 180px;
+}
+
+.model-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #eef2f8;
+}
+
 .chat-title {
   font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
   font-size: 18px;
@@ -291,14 +314,15 @@ body {
 
 
 .chat-body {
-  display: grid;
-  grid-template-rows: 1fr auto;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   height: 100%;
 }
 
 .chat-history {
   overflow: auto;
+  max-height: calc(100% - 110px);
   padding: 24px 26px 10px;
   display: grid;
   gap: 16px;
@@ -318,7 +342,7 @@ body {
   padding: 12px 16px;
   border-radius: 18px;
   max-width: min(540px, 80%);
-  line-height: 1.6;
+  /* line-height: 1.6; */
   background: #fff;
   border: 1px solid var(--border);
 }
@@ -353,7 +377,7 @@ body {
 }
 
 .message.user .message-actions {
-  justify-self: start;
+  justify-self: end;
 }
 
 .message.assistant .message-actions {
@@ -382,6 +406,11 @@ body {
   border-color: rgba(16, 34, 58, 0.4);
 }
 
+.action-button--done {
+  background: #ccccff;
+  border-color: transparent;
+}
+
 .chat-input {
   border-top: 1px solid var(--border);
   padding: 16px 20px 20px;
@@ -390,6 +419,7 @@ body {
   gap: 12px;
   align-items: center;
   background: #f2f7ff;
+  margin-top: auto;
 }
 
 .send-button {
@@ -435,6 +465,10 @@ body {
 .toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+.toast.success {
+  background: #2dbd6e;
 }
 
 .modal {

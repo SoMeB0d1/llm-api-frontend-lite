@@ -38,6 +38,14 @@ async function readJsonBody(req) {
   return JSON.parse(raw);
 }
 
+async function readRawBody(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 function safePath(urlPath) {
   const cleaned = urlPath.split("?")[0];
   const relative = cleaned === "/" ? "/index.html" : cleaned;
@@ -77,6 +85,36 @@ async function handleChat(req, res) {
   }
 }
 
+async function handleV1Proxy(req, res) {
+  try {
+    const targetUrl = `${backendUrl}${req.url}`;
+    const headers = {};
+    if (req.headers["content-type"]) {
+      headers["Content-Type"] = req.headers["content-type"];
+    }
+    const body = ["GET", "HEAD"].includes(req.method || "")
+      ? undefined
+      : await readRawBody(req);
+    const upstream = await fetch(targetUrl, {
+      method: req.method,
+      headers,
+      body,
+    });
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    res.writeHead(upstream.status, {
+      "Content-Type": upstream.headers.get("content-type") || "application/json",
+    });
+    res.end(buffer);
+  } catch (error) {
+    send(
+      res,
+      502,
+      JSON.stringify({ error: "proxy_error", message: error.message }),
+      "application/json"
+    );
+  }
+}
+
 async function handleStatic(req, res) {
   const resolved = safePath(req.url || "/");
   if (!resolved) {
@@ -95,6 +133,10 @@ async function handleStatic(req, res) {
 const server = http.createServer(async (req, res) => {
   if (req.url === "/chat" && req.method === "POST") {
     await handleChat(req, res);
+    return;
+  }
+  if (req.url && req.url.startsWith("/v1")) {
+    await handleV1Proxy(req, res);
     return;
   }
   await handleStatic(req, res);
