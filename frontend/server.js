@@ -120,6 +120,34 @@ async function handleChat(req, res) {
   }
 }
 
+async function handleHistory(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    if (!body) {
+      send(res, 400, "{\"error\":\"empty_body\"}", "application/json");
+      return;
+    }
+
+    const upstream = await fetch(`${backendUrl}/history`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const text = await upstream.text();
+    res.writeHead(upstream.status, {
+      "Content-Type": upstream.headers.get("content-type") || "application/json",
+    });
+    res.end(text);
+  } catch (error) {
+    send(
+      res,
+      502,
+      JSON.stringify({ error: "proxy_error", message: error.message }),
+      "application/json"
+    );
+  }
+}
+
 async function handleV1Proxy(req, res) {
   try {
     const targetUrl = `${backendUrl}${req.url}`;
@@ -168,6 +196,10 @@ async function handleStatic(req, res) {
 const server = http.createServer(async (req, res) => {
   if (req.url === "/chat" && req.method === "POST") {
     await handleChat(req, res);
+    return;
+  }
+  if (req.url === "/history" && req.method === "POST") {
+    await handleHistory(req, res);
     return;
   }
   if (req.url && (req.url.startsWith("/v1") || req.url.startsWith("/auth"))) {

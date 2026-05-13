@@ -49,13 +49,17 @@
 {"answer":"<string>"}
 ```
 
-### GET /history
+### POST /history
 - 用途：获取历史会话列表
-- 后端实现情况：未实现（Go 后端未注册该路由）
+- 后端实现情况：已实现（路由见 [backend/main.go](backend/main.go)，处理见 [backend/history.go](backend/history.go)）
 - 调用位置：主聊天页（[frontend/src/app.js](frontend/src/app.js)）
-- 期望响应字段：
+- 请求体：
 ```json
-{"items":[{"...":"..."}]}
+{"user_id":"<string>"}
+```
+- 期望响应字段（直接返回数组）：
+```json
+[{"last_edit_time":"<string>","title":"<string>","conversation_id":123}]
 ```
 
 ## 模型列表

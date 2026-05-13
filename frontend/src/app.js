@@ -377,7 +377,42 @@ function toggleModal(modal, show) {
 }
 
 function formatSummary(item) {
-  return item.summary || "(no summary)";
+  return item.title || item.summary || "(no title)";
+}
+
+function normalizeHistoryTimestamp(value) {
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (/^\d+$/.test(trimmed)) {
+      const numeric = Number(trimmed);
+      if (!Number.isNaN(numeric)) {
+        return trimmed.length <= 10 ? numeric * 1000 : numeric;
+      }
+    }
+    const parsed = Date.parse(trimmed);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return 0;
+}
+
+function sortHistoryByTime(items) {
+  items.sort((a, b) =>
+    normalizeHistoryTimestamp(b?.last_edit_time) -
+      normalizeHistoryTimestamp(a?.last_edit_time)
+  );
+}
+
+function handleInvalidUserId() {
+  localStorage.removeItem(STORAGE_KEYS.userId);
+  localStorage.removeItem(STORAGE_KEYS.token);
+  alert("出了一些错误，联系管理员");
+  console.error("invalid user_id in index");
+  window.location.href = "/login/login.html";
 }
 
 function renderHistory() {
@@ -390,9 +425,13 @@ function renderHistory() {
     return;
   }
   state.history.forEach((item) => {
-    const entry = document.createElement("div");
+    const entry = document.createElement("button");
     entry.className = "history-item";
+    entry.type = "button";
     entry.textContent = formatSummary(item);
+    if (item?.conversation_id !== undefined && item?.conversation_id !== null) {
+      entry.dataset.conversationId = String(item.conversation_id);
+    }
     elements.historyList.appendChild(entry);
   });
 }
@@ -662,14 +701,52 @@ async function validateToken() {
 
 async function loadHistory() {
   renderHistory();
-  try {
-    const data = await apiFetch("/history", { method: "GET" });
-    state.history = Array.isArray(data.items) ? data.items : [];
-    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(state.history));
-    renderHistory();
-  } catch (error) {
-    setStatus("History unavailable");
+  const { controller, timeout } = getTimeoutSignal(20000);
+  const headers = { "Content-Type": "application/json" };
+  if (state.token) {
+    headers.Authorization = `Bearer ${state.token}`;
   }
+  let response;
+  try {
+    response = await fetch(`${state.baseUrl}/history`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ user_id: state.userId }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timeout);
+    setStatus("History unavailable");
+    return;
+  }
+  clearTimeout(timeout);
+
+  if (response.status === 404) {
+    handleInvalidUserId();
+    return;
+  }
+  if (!response.ok) {
+    setStatus("History unavailable");
+    return;
+  }
+
+  let data = [];
+  try {
+    const text = await response.text();
+    if (text) {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        data = parsed;
+      }
+    }
+  } catch (error) {
+    data = [];
+  }
+
+  sortHistoryByTime(data);
+  state.history = data;
+  localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(state.history));
+  renderHistory();
 }
 
 async function sendPrompt(prompt) {
