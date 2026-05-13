@@ -1,7 +1,6 @@
 const state = {
   baseUrl: "",
   token: "",
-  refreshToken: "",
   userId: "guest",
   userName: "guest",
   topicId: "",
@@ -37,10 +36,6 @@ const elements = {
   statusText: document.getElementById("statusText"),
   userId: document.getElementById("userId"),
   toast: document.getElementById("toast"),
-  loginModal: document.getElementById("loginModal"),
-  loginForm: document.getElementById("loginForm"),
-  loginUsername: document.getElementById("loginUsername"),
-  loginPassword: document.getElementById("loginPassword"),
   settingsModal: document.getElementById("settingsModal"),
   settingsForm: document.getElementById("settingsForm"),
   apiBaseUrl: document.getElementById("apiBaseUrl"),
@@ -49,7 +44,6 @@ const elements = {
 
 const STORAGE_KEYS = {
   token: "llm.token",
-  refresh: "llm.refresh",
   userId: "llm.userId",
   userName: "llm.userName",
   baseUrl: "llm.baseUrl",
@@ -343,7 +337,6 @@ async function retryPrompt(wrapper) {
 function loadStoredState() {
   const legacyUser = localStorage.getItem("llm.user");
   state.token = localStorage.getItem(STORAGE_KEYS.token) || "";
-  state.refreshToken = localStorage.getItem(STORAGE_KEYS.refresh) || "";
   state.userId =
     localStorage.getItem(STORAGE_KEYS.userId) || legacyUser || "guest";
   state.userName =
@@ -364,7 +357,6 @@ function loadStoredState() {
 
 function saveAuth() {
   localStorage.setItem(STORAGE_KEYS.token, state.token);
-  localStorage.setItem(STORAGE_KEYS.refresh, state.refreshToken);
   localStorage.setItem(STORAGE_KEYS.userId, state.userId);
   localStorage.setItem(STORAGE_KEYS.userName, state.userName);
 }
@@ -550,12 +542,6 @@ async function apiFetch(path, options = {}) {
     signal: controller.signal,
   });
   clearTimeout(timeout);
-  if (response.status === 401 && state.refreshToken) {
-    const refreshed = await refreshToken();
-    if (refreshed) {
-      return apiFetch(path, options);
-    }
-  }
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
     try {
@@ -639,20 +625,6 @@ async function fetchModelsIfAllowed() {
   }
 }
 
-async function login(username, password) {
-  setStatus("Signing in...");
-  const data = await apiFetch("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-  });
-  state.token = data.token || "";
-  state.refreshToken = data.refreshToken || "";
-  setUserId(data.userId || username, username);
-  saveAuth();
-  toggleModal(elements.loginModal, false);
-  setStatus("Ready");
-}
-
 async function validateToken() {
   if (!state.token) {
     return false;
@@ -684,25 +656,6 @@ async function validateToken() {
     saveAuth();
     return true;
   } catch (error) {
-    return false;
-  }
-}
-
-async function refreshToken() {
-  try {
-    const data = await apiFetch("/auth/refresh", {
-      method: "POST",
-      body: JSON.stringify({ refreshToken: state.refreshToken }),
-    });
-    state.token = data.token || "";
-    state.refreshToken = data.refreshToken || state.refreshToken;
-    saveAuth();
-    return true;
-  } catch (error) {
-    state.token = "";
-    state.refreshToken = "";
-    saveAuth();
-    toggleModal(elements.loginModal, true);
     return false;
   }
 }
@@ -828,31 +781,6 @@ function initEvents() {
       setMenuDisabled(false);
     }
   });
-
-  if (elements.loginModal) {
-    elements.loginModal.addEventListener("click", (event) => {
-      if (event.target === elements.loginModal) {
-        toggleModal(elements.loginModal, true);
-      }
-    });
-  }
-
-  if (elements.loginForm) {
-    elements.loginForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const username = elements.loginUsername.value.trim();
-      const password = elements.loginPassword.value.trim();
-      if (!username || !password) {
-        return;
-      }
-      try {
-        await login(username, password);
-        await loadHistory();
-      } catch (error) {
-        setStatus("Login failed");
-      }
-    });
-  }
 
   if (elements.settingsForm) {
     elements.settingsForm.addEventListener("submit", (event) => {
