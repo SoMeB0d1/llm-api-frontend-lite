@@ -54,7 +54,7 @@ func openLoginStore() (*loginStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	dbPath := filepath.Join(cwd, "login.db")
+	dbPath := filepath.Join(cwd, "database.db")
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
@@ -103,14 +103,37 @@ func (s *loginStore) ensureSchema() error {
 	CHECK (length(user_password) <= 32),
       CHECK (length(user_token) = 32)
     );`,
-		`CREATE TABLE IF NOT EXISTS history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id TEXT NOT NULL,
-      chat_date TEXT NOT NULL,
-      history_json TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES user(user_id)
-    );`,
-		`CREATE INDEX IF NOT EXISTS idx_history_user_date ON history (user_id, chat_date);`,
+		`CREATE TABLE IF NOT EXISTS conversation (
+			conversation_id INTEGER PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			last_edit_time TEXT NOT NULL,
+			title TEXT NOT NULL,
+			model TEXT NOT NULL,
+			prompt TEXT NOT NULL,
+			CHECK (conversation_id BETWEEN 0 AND 1048575),
+			CHECK (length(title) <= 32),
+			CHECK (length(model) <= 32),
+			FOREIGN KEY (user_id) REFERENCES user(user_id)
+		);`,
+		`CREATE TABLE IF NOT EXISTS message (
+			message_id INTEGER PRIMARY KEY,
+			conversation_id INTEGER NOT NULL,
+			time TEXT NOT NULL,
+			roll TEXT NOT NULL,
+			context TEXT NOT NULL,
+			CHECK (message_id BETWEEN 0 AND 1073741823),
+			CHECK (roll IN ('user', 'llm')),
+			FOREIGN KEY (conversation_id) REFERENCES conversation(conversation_id)
+		);`,
+		`CREATE TABLE IF NOT EXISTS files (
+			files_id INTEGER PRIMARY KEY,
+			message_id INTEGER NOT NULL,
+			time TEXT NOT NULL,
+			file_name TEXT NOT NULL,
+			file_hash TEXT NOT NULL,
+			CHECK (files_id BETWEEN 0 AND 1048575),
+			FOREIGN KEY (message_id) REFERENCES message(message_id)
+		);`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_token ON user (user_token);`,
 	}
 	for _, stmt := range statements {
