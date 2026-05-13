@@ -1,13 +1,41 @@
 import http from "http";
 import path from "path";
 import { fileURLToPath } from "url";
+import { readFileSync } from "fs";
 import { readFile } from "fs/promises";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function loadEnvFromFile() {
+  try {
+    const envPath = path.join(__dirname, "..", ".env");
+    const raw = readFileSync(envPath, "utf-8");
+    raw.split(/\r?\n/).forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) {
+        return;
+      }
+      const idx = trimmed.indexOf("=");
+      if (idx === -1) {
+        return;
+      }
+      const key = trimmed.slice(0, idx).trim();
+      const value = trimmed.slice(idx + 1).trim();
+      if (key && !process.env[key]) {
+        process.env[key] = value;
+      }
+    });
+  } catch (error) {
+    // Ignore missing .env
+  }
+}
+
+loadEnvFromFile();
+
 const port = Number(process.env.FRONTEND_PORT || 3000);
-const backendUrl = process.env.BACKEND_URL || "http://localhost:8787";
+const backendPort = Number(process.env.BACKEND_PORT || 8787);
+const backendUrl = process.env.BACKEND_URL || `http://localhost:${backendPort}`;
 const publicDir = __dirname;
 
 const contentTypes = {
@@ -142,13 +170,11 @@ const server = http.createServer(async (req, res) => {
     await handleChat(req, res);
     return;
   }
-  if (req.url && req.url.startsWith("/v1")) {
+  if (req.url && (req.url.startsWith("/v1") || req.url.startsWith("/auth"))) {
     await handleV1Proxy(req, res);
     return;
   }
   await handleStatic(req, res);
 });
 
-server.listen(port, () => {
-  console.log(`Frontend server running on http://localhost:${port}`);
-});
+server.listen(port);

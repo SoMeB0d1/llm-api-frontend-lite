@@ -1,2 +1,6 @@
 .env
 ./github/agents
+./backend/log
+./backend/login.db
+./backend/login.db-shm
+./backend/login.db-wal

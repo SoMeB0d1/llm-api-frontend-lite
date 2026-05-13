@@ -1,0 +1,3 @@
+2026/05/13 00:25:15 {"event":"backend_exchange","method":"GET","path":"/auth/token","query":"","request_body":"","response_body":"","status":405}
+2026/05/13 00:25:18 {"event":"backend_exchange","method":"GET","path":"/auth/token","query":"","request_body":"","response_body":"","status":405}
+2026/05/13 00:26:01 {"event":"backend_exchange","method":"POST","path":"/auth/token","query":"","request_body":"{\"token\":\"\"}","response_body":"{\"token_valid\":false,\"user_ID\":\"\",\"user_name\":\"\",\"new_token\":\"\"}\n","status":200}

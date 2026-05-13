@@ -106,6 +106,21 @@ body {
   color: #7a8aa3;
 }
 
+.primary-button.login-button--loading,
+.primary-button.login-button--loading:disabled {
+  background: #000288;
+  color: #ffffff;
+  box-shadow: none;
+  opacity: 1;
+  display: grid;
+  place-items: center;
+}
+
+.login-button--loading img {
+  width: 18px;
+  height: 18px;
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -171,6 +186,28 @@ body {
   font-size: 12px;
   color: var(--muted);
   min-height: 16px;
+}
+
+.login-toast {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-12px);
+  background: #d62828;
+  color: #ffffff;
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  box-shadow: 0 12px 30px rgba(214, 40, 40, 0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  z-index: 20;
+}
+
+.login-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .login-link {

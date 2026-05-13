@@ -3,6 +3,7 @@ const state = {
   token: "",
   refreshToken: "",
   userId: "guest",
+  userName: "guest",
   topicId: "",
   model: "deepseek-v4-flash",
   isNewChat: true,
@@ -49,7 +50,8 @@ const elements = {
 const STORAGE_KEYS = {
   token: "llm.token",
   refresh: "llm.refresh",
-  userId: "llm.user",
+  userId: "llm.userId",
+  userName: "llm.userName",
   baseUrl: "llm.baseUrl",
   history: "llm.history",
 };
@@ -339,9 +341,13 @@ async function retryPrompt(wrapper) {
 }
 
 function loadStoredState() {
+  const legacyUser = localStorage.getItem("llm.user");
   state.token = localStorage.getItem(STORAGE_KEYS.token) || "";
   state.refreshToken = localStorage.getItem(STORAGE_KEYS.refresh) || "";
-  state.userId = localStorage.getItem(STORAGE_KEYS.userId) || "guest";
+  state.userId =
+    localStorage.getItem(STORAGE_KEYS.userId) || legacyUser || "guest";
+  state.userName =
+    localStorage.getItem(STORAGE_KEYS.userName) || legacyUser || "guest";
   state.baseUrl =
     localStorage.getItem(STORAGE_KEYS.baseUrl) || state.baseUrl;
   const cachedHistory = localStorage.getItem(STORAGE_KEYS.history);
@@ -360,6 +366,7 @@ function saveAuth() {
   localStorage.setItem(STORAGE_KEYS.token, state.token);
   localStorage.setItem(STORAGE_KEYS.refresh, state.refreshToken);
   localStorage.setItem(STORAGE_KEYS.userId, state.userId);
+  localStorage.setItem(STORAGE_KEYS.userName, state.userName);
 }
 
 function setBaseUrl(url) {
@@ -514,9 +521,10 @@ function seedTestConversation() {
   setNewChatState(false);
 }
 
-function setUserId(id) {
-  state.userId = id || "guest";
-  elements.userId.textContent = state.userId;
+function setUserId(id, name) {
+  state.userId = id || state.userId || "guest";
+  state.userName = name || state.userName || "guest";
+  elements.userId.textContent = state.userName;
   saveAuth();
 }
 
@@ -639,7 +647,7 @@ async function login(username, password) {
   });
   state.token = data.token || "";
   state.refreshToken = data.refreshToken || "";
-  setUserId(data.userId || username);
+  setUserId(data.userId || username, username);
   saveAuth();
   toggleModal(elements.loginModal, false);
   setStatus("Ready");
@@ -670,10 +678,9 @@ async function validateToken() {
     if (data.new_token) {
       state.token = data.new_token;
     }
-    const resolvedUserId = data.user_ID || data.user_name || state.userId;
-    if (resolvedUserId) {
-      setUserId(resolvedUserId);
-    }
+    const resolvedUserId = data.user_ID || state.userId;
+    const resolvedUserName = data.user_name || state.userName || resolvedUserId;
+    setUserId(resolvedUserId, resolvedUserName);
     saveAuth();
     return true;
   } catch (error) {
@@ -922,7 +929,7 @@ function initEvents() {
 
 async function bootstrap() {
   loadStoredState();
-  setUserId(state.userId);
+  setUserId(state.userId, state.userName);
   setBaseUrl(state.baseUrl);
   initEvents();
   const isValid = await validateToken();

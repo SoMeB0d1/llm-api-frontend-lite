@@ -1,10 +1,9 @@
 const STORAGE_KEYS = {
   token: "llm.token",
-  userId: "llm.user",
+  userId: "llm.userId",
+  userName: "llm.userName",
   baseUrl: "llm.baseUrl",
 };
-
-const DEFAULT_BASE_URL = "http://localhost:8787";
 
 function normalizeBaseUrl(url) {
   if (!url) {
@@ -13,20 +12,11 @@ function normalizeBaseUrl(url) {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
-function resolveBaseUrl() {
-  const cached = normalizeBaseUrl(
-    localStorage.getItem(STORAGE_KEYS.baseUrl) || ""
-  );
-  const resolved = cached || DEFAULT_BASE_URL;
-  if (!cached) {
-    localStorage.setItem(STORAGE_KEYS.baseUrl, resolved);
-  }
-  return resolved;
-}
-
 async function checkToken() {
   const token = localStorage.getItem(STORAGE_KEYS.token) || "";
-  const baseUrl = resolveBaseUrl();
+  const baseUrl = normalizeBaseUrl(
+    localStorage.getItem(STORAGE_KEYS.baseUrl) || ""
+  );
   try {
     const response = await fetch(`${baseUrl}/auth/token`, {
       method: "POST",
@@ -46,9 +36,11 @@ async function checkToken() {
       if (data.new_token) {
         localStorage.setItem(STORAGE_KEYS.token, data.new_token);
       }
-      const nextUser = data.user_ID || data.user_name;
-      if (nextUser) {
-        localStorage.setItem(STORAGE_KEYS.userId, nextUser);
+      if (data.user_ID) {
+        localStorage.setItem(STORAGE_KEYS.userId, data.user_ID);
+      }
+      if (data.user_name) {
+        localStorage.setItem(STORAGE_KEYS.userName, data.user_name);
       }
       window.location.href = "/index.html";
       return;

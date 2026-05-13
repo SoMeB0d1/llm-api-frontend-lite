@@ -1,7 +1,8 @@
 const STORAGE_KEYS = {
   token: "llm.token",
   refresh: "llm.refresh",
-  userId: "llm.user",
+  userId: "llm.userId",
+  userName: "llm.userName",
   baseUrl: "llm.baseUrl",
 };
 
@@ -11,13 +12,12 @@ const elements = {
   password: document.getElementById("loginPassword"),
   submit: document.getElementById("loginSubmit"),
   status: document.getElementById("loginStatus"),
+  toast: document.getElementById("loginToast"),
 };
 
 const state = {
   baseUrl: "",
 };
-
-const DEFAULT_BASE_URL = "http://localhost:8787";
 
 function normalizeBaseUrl(url) {
   if (!url) {
@@ -26,12 +26,16 @@ function normalizeBaseUrl(url) {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
-function setStatus(text, isError = false) {
-  if (!elements.status) {
+function showToast(message) {
+  if (!elements.toast) {
     return;
   }
-  elements.status.textContent = text;
-  elements.status.style.color = isError ? "#d62828" : "";
+  elements.toast.textContent = message;
+  elements.toast.classList.add("show");
+  window.clearTimeout(showToast.timeoutId);
+  showToast.timeoutId = window.setTimeout(() => {
+    elements.toast.classList.remove("show");
+  }, 1800);
 }
 
 function setSubmitting(submitting) {
@@ -39,14 +43,24 @@ function setSubmitting(submitting) {
     return;
   }
   elements.submit.disabled = submitting;
-  elements.submit.textContent = submitting ? "Signing in..." : "Continue";
+  if (submitting) {
+    if (!elements.submit.dataset.label) {
+      elements.submit.dataset.label = elements.submit.textContent || "Continue";
+    }
+    elements.submit.classList.add("login-button--loading");
+    elements.submit.innerHTML =
+      '<img src="/resources/loading.svg" alt="Loading" />';
+  } else {
+    elements.submit.classList.remove("login-button--loading");
+    elements.submit.textContent = elements.submit.dataset.label || "Continue";
+  }
 }
 
 async function login(username, password) {
   const response = await fetch(`${state.baseUrl}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ user_name: username, user_psw: password }),
   });
   const text = await response.text();
   let data = {};
@@ -64,25 +78,19 @@ async function login(username, password) {
   return data;
 }
 
-function saveAuth(data, username) {
-  localStorage.setItem(STORAGE_KEYS.token, data.token || "");
-  localStorage.setItem(STORAGE_KEYS.refresh, data.refreshToken || "");
-  localStorage.setItem(STORAGE_KEYS.userId, data.userId || username || "");
+function saveAuth(data, userId, userName) {
+  localStorage.setItem(STORAGE_KEYS.token, data.new_token || "");
+  localStorage.setItem(STORAGE_KEYS.userId, userId || "");
+  localStorage.setItem(STORAGE_KEYS.userName, userName || "");
 }
 
 function loadBaseUrl() {
   const cached = localStorage.getItem(STORAGE_KEYS.baseUrl) || "";
-  state.baseUrl = normalizeBaseUrl(cached) || DEFAULT_BASE_URL;
-  if (!cached) {
-    localStorage.setItem(STORAGE_KEYS.baseUrl, state.baseUrl);
-  }
+  state.baseUrl = normalizeBaseUrl(cached);
 }
 
 function init() {
   loadBaseUrl();
-  if (elements.username) {
-    elements.username.value = localStorage.getItem(STORAGE_KEYS.userId) || "";
-  }
 
   if (!elements.form) {
     return;
@@ -92,19 +100,29 @@ function init() {
     event.preventDefault();
     const username = elements.username?.value.trim() || "";
     const password = elements.password?.value.trim() || "";
-    if (!username || !password) {
-      setStatus("Username and password are required.", true);
+    if (!username) {
+      showToast("用户名不能为空");
+      return;
+    }
+    if (!password) {
+      showToast("密码不能为空");
       return;
     }
     try {
       setSubmitting(true);
-      setStatus("Signing in...");
       const data = await login(username, password);
-      saveAuth(data, username);
-      setStatus("Signed in. Redirecting...");
-      window.location.href = "/";
+      if (data.user_exist === false) {
+        showToast("用户名错误");
+        return;
+      }
+      if (data.psw_right === false) {
+        showToast("密码错误");
+        return;
+      }
+      saveAuth(data, data.user_ID || "", username);
+      window.location.href = "/index.html";
     } catch (error) {
-      setStatus(error.message || "Login failed.", true);
+      showToast(error.message || "登录失败");
     } finally {
       setSubmitting(false);
     }
