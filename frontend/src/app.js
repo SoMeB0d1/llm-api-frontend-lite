@@ -415,13 +415,17 @@ function handleInvalidUserId() {
   window.location.href = "/login/login.html";
 }
 
+function handleInvalidConversationId() {
+  localStorage.removeItem(STORAGE_KEYS.userId);
+  localStorage.removeItem(STORAGE_KEYS.token);
+  alert("出现错误，请联系管理员");
+  console.error("error: invalid conversation_id");
+  window.location.href = "/login/login.html";
+}
+
 function renderHistory() {
   elements.historyList.innerHTML = "";
   if (!state.history.length) {
-    const empty = document.createElement("div");
-    empty.className = "history-item";
-    empty.textContent = "No history yet.";
-    elements.historyList.appendChild(empty);
     return;
   }
   state.history.forEach((item) => {
@@ -431,6 +435,9 @@ function renderHistory() {
     entry.textContent = formatSummary(item);
     if (item?.conversation_id !== undefined && item?.conversation_id !== null) {
       entry.dataset.conversationId = String(item.conversation_id);
+      entry.addEventListener("click", () => {
+        loadConversation(item.conversation_id);
+      });
     }
     elements.historyList.appendChild(entry);
   });
@@ -441,9 +448,9 @@ function renderMarkdown(text) {
     return window.marked.parse(text, { breaks: true });
   }
   return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
+    .replace(/&/g, "&")
+    .replace(/</g, "<")
+    .replace(/>/g, ">")
     .replace(/\n/g, "<br>");
 }
 
@@ -511,45 +518,6 @@ function renderMessage(role, content) {
   }
   elements.chatHistory.scrollTop = elements.chatHistory.scrollHeight;
   return bubble;
-}
-
-function seedTestConversation() {
-  if (!elements.chatHistory || elements.chatHistory.children.length) {
-    return;
-  }
-  const sample = [
-    {
-      role: "user",
-      content: "Summarize the following notes into bullet points.",
-    },
-    {
-      role: "assistant",
-      content:
-        "Here is a concise summary:\n\n- The project targets a lightweight UI with a fixed sidebar and scrollable chat history.\n- The backend uses a Go proxy to an OpenAI-compatible API.\n- Frontend state includes user ID, topic ID, and model selection.\n- Error handling should surface clearly in the header status.\n- UI controls include copy/edit/retry actions per message.",
-    },
-    {
-      role: "user",
-      content:
-        "Give me a quick plan for a weekend trip to a coastal city with food and museums.",
-    },
-    {
-      role: "assistant",
-      content:
-        "Weekend plan:\n\n**Day 1**\n- Morning: waterfront walk + local market breakfast.\n- Afternoon: city history museum, then coffee by the harbor.\n- Evening: seafood dinner, sunset lookout.\n\n**Day 2**\n- Morning: contemporary art museum.\n- Afternoon: beach time and a casual lunch.\n- Evening: food street crawl and a night ferry ride.",
-    },
-    {
-      role: "user",
-      content:
-        "Explain the difference between optimistic and pessimistic concurrency control with a quick example.",
-    },
-    {
-      role: "assistant",
-      content:
-        "Optimistic control assumes conflicts are rare and checks at commit time. Example: two users edit a record; the second save is rejected if the version changed.\n\nPessimistic control locks resources up front. Example: the first editor locks a row; the second must wait until the lock is released.",
-    },
-  ];
-  sample.forEach((item) => renderMessage(item.role, item.content));
-  setNewChatState(false);
 }
 
 function setUserId(id, name) {
@@ -659,6 +627,7 @@ async function fetchModelsIfAllowed() {
     applyModelOptions(models);
   } catch (error) {
     showToast("模型列表获取失败");
+    console.error(error);
   } finally {
     modelFetchInFlight = false;
   }
@@ -747,6 +716,46 @@ async function loadHistory() {
   state.history = data;
   localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(state.history));
   renderHistory();
+}
+
+async function loadConversation(conversationId) {
+  resetChat();
+  setStatus("Loading conversation...");
+  try {
+    const response = await fetch(`${state.baseUrl}/history/topic`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
+      },
+      body: JSON.stringify({ conversation_id: conversationId }),
+    });
+    if (response.status === 404) {
+      handleInvalidConversationId();
+      return;
+    }
+    if (!response.ok) {
+      showToast("加载对话失败");
+      setStatus("Ready");
+      return;
+    }
+    const data = await response.json();
+    if (!Array.isArray(data)) {
+      showToast("加载对话失败");
+      setStatus("Ready");
+      return;
+    }
+    data.forEach((msg) => {
+      const role = msg.roll === "llm" ? "assistant" : "user";
+      renderMessage(role, msg.context || "");
+    });
+    state.topicId = `topic-${conversationId}`;
+    setNewChatState(false);
+    setStatus("Ready");
+  } catch (error) {
+    showToast("加载对话失败");
+    setStatus("Ready");
+  }
 }
 
 async function sendPrompt(prompt) {
@@ -939,7 +948,6 @@ async function bootstrap() {
   initEvents();
   const isValid = await validateToken();
   if (isValid) {
-    seedTestConversation();
     loadHistory();
     return;
   }

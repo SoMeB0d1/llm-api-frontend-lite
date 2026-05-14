@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 )
 
 func newProxy(target *url.URL, apiKey string) *httputil.ReverseProxy {
@@ -17,6 +18,16 @@ func newProxy(target *url.URL, apiKey string) *httputil.ReverseProxy {
 		originalDirector(req)
 		req.Host = target.Host
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	}
+
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		// 移除上游 CORS 头，避免与 withCORS 中间件重复
+		for key := range resp.Header {
+			if strings.HasPrefix(strings.ToLower(key), "access-control-") {
+				resp.Header.Del(key)
+			}
+		}
+		return nil
 	}
 
 	proxy.Transport = &loggingTransport{base: http.DefaultTransport}

@@ -148,6 +148,34 @@ async function handleHistory(req, res) {
   }
 }
 
+async function handleHistoryTopic(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    if (!body) {
+      send(res, 400, "{\"error\":\"empty_body\"}", "application/json");
+      return;
+    }
+
+    const upstream = await fetch(`${backendUrl}/history/topic`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const text = await upstream.text();
+    res.writeHead(upstream.status, {
+      "Content-Type": upstream.headers.get("content-type") || "application/json",
+    });
+    res.end(text);
+  } catch (error) {
+    send(
+      res,
+      502,
+      JSON.stringify({ error: "proxy_error", message: error.message }),
+      "application/json"
+    );
+  }
+}
+
 async function handleV1Proxy(req, res) {
   try {
     const targetUrl = `${backendUrl}${req.url}`;
@@ -194,12 +222,26 @@ async function handleStatic(req, res) {
 }
 
 const server = http.createServer(async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
   if (req.url === "/chat" && req.method === "POST") {
     await handleChat(req, res);
     return;
   }
   if (req.url === "/history" && req.method === "POST") {
     await handleHistory(req, res);
+    return;
+  }
+  if (req.url === "/history/topic" && req.method === "POST") {
+    await handleHistoryTopic(req, res);
     return;
   }
   if (req.url && (req.url.startsWith("/v1") || req.url.startsWith("/auth"))) {

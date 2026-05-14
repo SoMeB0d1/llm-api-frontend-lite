@@ -1,7 +1,7 @@
 # 前端与后端交互 API 一览
 
 > 说明：所有请求都以 `baseUrl` 为前缀（来自本地缓存 `llm.baseUrl` 或设置页输入）。
-> 前端页面会直接请求 `baseUrl`，也可以指向 `frontend/server.js` 的 Node 代理（它会转发 `/chat`、`/v1/*`、`/auth/*` 到后端）。
+> 前端页面会直接请求 `baseUrl`，也可以指向 `frontend/server.js` 的 Node 代理（它会转发 `/chat`、`/history`、`/history/topic`、`/v1/*`、`/auth/*` 到后端）。
 
 ## 认证相关
 
@@ -62,12 +62,28 @@
 [{"last_edit_time":"<string>","title":"<string>","conversation_id":123}]
 ```
 
+### POST /history/topic
+- 用途：获取指定会话的全部消息记录
+- 后端实现情况：待实现（需在 backend/history.go 中新增处理函数）
+- 调用位置：主聊天页（[frontend/src/app.js](frontend/src/app.js)）历史列表按钮点击事件
+- 请求体：
+```json
+{"conversation_id":123}
+```
+- 期望响应字段（直接返回数组）：
+```json
+[{"message_id":1,"time":"<string>","roll":"<string>","context":"<string>"}]
+```
+- 错误处理：
+  - 后端找不到 conversation_id 时返回 404
+  - 前端收到 404 后清除 localStorage 中的 userId 和 token，弹窗提示，输出 console error，跳转至 login.html
+
 ## 模型列表
 
 ### GET /v1/models
 - 用途：获取可用模型列表
-- 后端实现情况：已实现为代理转发（/v1/* 由 Go 代理上游，成功取决于上游与 API Key）
-- 调用位置：主聊天页（[frontend/src/app.js](frontend/src/app.js)）
+- 后端实现情况：前端请求 `/v1/models`，由 Node 代理（`handleV1Proxy`）转发至 Go 后端 `/v1/models`，再由 Go 代理上游 API
+- 调用位置：主聊天页（[src/app.js](src/app.js)）
 - 期望响应字段：
 ```json
 {"data":[{"id":"<string>"}]}

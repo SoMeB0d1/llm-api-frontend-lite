@@ -96,6 +96,7 @@ func main() {
 
 	mux.Handle("/chat", withCORS(handleChat(upstreamBase, apiKey)))
 	mux.Handle("/history", withCORS(handleHistory(store)))
+	mux.Handle("/history/topic", withCORS(handleHistoryTopic(store)))
 	mux.Handle("/auth/login", withCORS(handleAuthLogin(store)))
 	mux.Handle("/auth/token", withCORS(handleAuthToken(store)))
 	mux.Handle("/v1/", withCORS(proxy))

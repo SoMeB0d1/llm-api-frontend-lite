@@ -1,6 +1,5 @@
 const STORAGE_KEYS = {
   token: "llm.token",
-  refresh: "llm.refresh",
   userId: "llm.userId",
   userName: "llm.userName",
   baseUrl: "llm.baseUrl",
