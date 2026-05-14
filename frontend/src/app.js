@@ -311,20 +311,31 @@ async function retryPrompt(wrapper) {
   const placeholder = renderMessage("assistant", "...");
   setMessagePrompt(placeholder, prompt);
   try {
-    const answer = await sendPrompt(prompt);
-    placeholder.innerHTML = renderMarkdown(answer);
-    placeholder.dataset.raw = answer;
-    const placeholderWrapper = placeholder.closest(".message");
-    if (placeholderWrapper) {
-      placeholderWrapper.dataset.raw = answer;
-    }
-    if (window.renderMathInElement) {
-      window.renderMathInElement(placeholder, {
-        delimiters: [
-          { left: "$$", right: "$$", display: true },
-          { left: "$", right: "$", display: false },
-        ],
-      });
+    const answer = await sendPrompt(prompt, placeholder);
+    if (placeholder.dataset.raw === answer) {
+      if (window.renderMathInElement) {
+        window.renderMathInElement(placeholder, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false },
+          ],
+        });
+      }
+    } else {
+      placeholder.innerHTML = renderMarkdown(answer);
+      placeholder.dataset.raw = answer;
+      const placeholderWrapper = placeholder.closest(".message");
+      if (placeholderWrapper) {
+        placeholderWrapper.dataset.raw = answer;
+      }
+      if (window.renderMathInElement) {
+        window.renderMathInElement(placeholder, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false },
+          ],
+        });
+      }
     }
   } catch (error) {
     placeholder.textContent = "Request failed.";
@@ -758,7 +769,92 @@ async function loadConversation(conversationId) {
   }
 }
 
-async function sendPrompt(prompt) {
+async function fetchStream(prompt, placeholder) {
+  const timeoutMs = 120000;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const headers = { "Content-Type": "application/json" };
+  if (state.token) {
+    headers.Authorization = `Bearer ${state.token}`;
+  }
+  let response;
+  try {
+    response = await fetch(`${state.baseUrl}/chat`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        userId: state.userId,
+        topicId: state.topicId,
+        model: state.model,
+        message: prompt,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timeout);
+    return null;
+  }
+  clearTimeout(timeout);
+  if (!response.ok) {
+    return null;
+  }
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.startsWith("text/event-stream")) {
+    // 上游返回非 SSE（JSON），直接解析，避免二次请求
+    try {
+      const json = await response.json();
+      return json.answer || "(no response)";
+    } catch (e) {
+      return null;
+    }
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split("\n");
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const delta = parsed?.choices?.[0]?.delta?.content;
+            if (delta) {
+              fullText += delta;
+            }
+          } catch (e) {
+            // 忽略部分 JSON 解析错误
+          }
+        }
+      }
+      if (placeholder && placeholder.parentElement) {
+        placeholder.innerHTML = renderMarkdown(fullText);
+        placeholder.dataset.raw = fullText;
+        const wrapper = placeholder.closest(".message");
+        if (wrapper) {
+          wrapper.dataset.raw = fullText;
+        }
+        elements.chatHistory.scrollTop = elements.chatHistory.scrollHeight;
+      }
+    }
+  } catch (error) {
+    // 流中断，使用已累积内容
+  }
+  return fullText || null;
+}
+
+async function sendPrompt(prompt, placeholder) {
+  setStatus("Thinking...");
+  const streamResult = await fetchStream(prompt, placeholder);
+  if (streamResult !== null) {
+    setStatus("Ready");
+    return streamResult;
+  }
   setStatus("Thinking...");
   const response = await apiFetch("/chat", {
     method: "POST",
@@ -917,20 +1013,32 @@ function initEvents() {
     const placeholder = renderMessage("assistant", "...");
     setMessagePrompt(placeholder, prompt);
     try {
-      const answer = await sendPrompt(prompt);
-      placeholder.innerHTML = renderMarkdown(answer);
-      placeholder.dataset.raw = answer;
-      const placeholderWrapper = placeholder.closest(".message");
-      if (placeholderWrapper) {
-        placeholderWrapper.dataset.raw = answer;
-      }
-      if (window.renderMathInElement) {
-        window.renderMathInElement(placeholder, {
-          delimiters: [
-            { left: "$$", right: "$$", display: true },
-            { left: "$", right: "$", display: false },
-          ],
-        });
+      const answer = await sendPrompt(prompt, placeholder);
+      if (placeholder.dataset.raw === answer) {
+        // 流式已完成渲染，仅执行数学渲染
+        if (window.renderMathInElement) {
+          window.renderMathInElement(placeholder, {
+            delimiters: [
+              { left: "$$", right: "$$", display: true },
+              { left: "$", right: "$", display: false },
+            ],
+          });
+        }
+      } else {
+        placeholder.innerHTML = renderMarkdown(answer);
+        placeholder.dataset.raw = answer;
+        const placeholderWrapper = placeholder.closest(".message");
+        if (placeholderWrapper) {
+          placeholderWrapper.dataset.raw = answer;
+        }
+        if (window.renderMathInElement) {
+          window.renderMathInElement(placeholder, {
+            delimiters: [
+              { left: "$$", right: "$$", display: true },
+              { left: "$", right: "$", display: false },
+            ],
+          });
+        }
       }
     } catch (error) {
       placeholder.textContent = "Request failed.";

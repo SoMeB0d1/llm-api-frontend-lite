@@ -33,6 +33,7 @@ type upstreamRequest struct {
 	Model    string            `json:"model"`
 	Messages []upstreamMessage `json:"messages"`
 	User     string            `json:"user,omitempty"`
+	Stream   bool              `json:"stream,omitempty"`
 }
 
 type upstreamChoice struct {
@@ -48,33 +49,41 @@ func translate(input string) string {
 	return input
 }
 
-func callUpstream(ctx context.Context, baseURL, apiKey string, payload ChatRequest) (string, error) {
+func buildUpstreamRequest(payload ChatRequest, stream bool) upstreamRequest {
 	translated := translate(payload.Message)
 	systemNote := fmt.Sprintf("user_id=%s; topic_id=%s; requested_model=%s", payload.UserID, payload.TopicID, payload.Model)
-	requestBody := upstreamRequest{
+	return upstreamRequest{
 		Model: "deepseek-v4-flash",
 		Messages: []upstreamMessage{
 			{Role: "system", Content: systemNote},
 			{Role: "user", Content: translated},
 		},
-		User: payload.UserID,
+		User:   payload.UserID,
+		Stream: stream,
 	}
+}
 
-	data, err := json.Marshal(requestBody)
-	if err != nil {
-		return "", err
-	}
-
+func doUpstream(ctx context.Context, baseURL, apiKey string, body []byte) (*http.Response, error) {
 	endpoint := strings.TrimRight(baseURL, "/") + "/v1/chat/completions"
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	request.Header.Set("Authorization", "Bearer "+apiKey)
 	request.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Do(request)
+	return client.Do(request)
+}
+
+func callUpstream(ctx context.Context, baseURL, apiKey string, payload ChatRequest) (string, error) {
+	reqBody := buildUpstreamRequest(payload, false)
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := doUpstream(ctx, baseURL, apiKey, data)
 	if err != nil {
 		return "", err
 	}
@@ -98,6 +107,79 @@ func callUpstream(ctx context.Context, baseURL, apiKey string, payload ChatReque
 	return parsed.Choices[0].Message.Content, nil
 }
 
+// streamUpstream attempts SSE streaming from upstream.
+// Returns (streamed=true, err) — if streamed, headers were already written.
+// Returns (streamed=false, err) if caller should fall back to non-streaming.
+func streamUpstream(ctx context.Context, baseURL, apiKey string, payload ChatRequest, w http.ResponseWriter) (bool, error) {
+	reqBody := buildUpstreamRequest(payload, true)
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return false, err
+	}
+
+	resp, err := doUpstream(ctx, baseURL, apiKey, data)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("upstream status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "text/event-stream") {
+		// 上游返回非 SSE（JSON），直接解析 body 并回写，不回退到 callUpstream
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return false, readErr
+		}
+		var parsed upstreamResponse
+		if err := json.Unmarshal(body, &parsed); err != nil || len(parsed.Choices) == 0 {
+			return false, fmt.Errorf("non-stream parse error: %w", err)
+		}
+		answer := parsed.Choices[0].Message.Content
+		response := ChatResponse{Answer: answer, Model: "deepseek-v4-flash"}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+		return false, nil
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return false, errors.New("response writer does not support flushing")
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	buf := make([]byte, 4096)
+	for {
+		select {
+		case <-ctx.Done():
+			return true, ctx.Err()
+		default:
+		}
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return true, writeErr
+			}
+			flusher.Flush()
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				return true, nil
+			}
+			return true, readErr
+		}
+	}
+}
+
 func handleChat(baseURL, apiKey string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -118,6 +200,21 @@ func handleChat(baseURL, apiKey string) http.Handler {
 			return
 		}
 
+		// 1) 尝试流式输出（或自动回退并已写入 JSON）
+		streamed, streamErr := streamUpstream(r.Context(), baseURL, apiKey, payload, w)
+		if streamed {
+			if streamErr != nil && !errors.Is(streamErr, context.Canceled) {
+				logConsolef("stream error after headers: %v", streamErr)
+			}
+			return
+		}
+		// streamed=false 且 err==nil 表示 streamUpstream 已成功写入 JSON 响应
+		if streamErr == nil {
+			return
+		}
+
+		// 2) streamUpstream 失败，回退到非流式
+		logConsolef("stream failed, fallback to non-stream: %v", streamErr)
 		answer, err := callUpstream(r.Context(), baseURL, apiKey, payload)
 		if err != nil {
 			w.WriteHeader(http.StatusBadGateway)

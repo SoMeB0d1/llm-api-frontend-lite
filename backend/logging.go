@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -158,16 +159,29 @@ type responseRecorder struct {
 	http.ResponseWriter
 	status int
 	body   bytes.Buffer
+	isSSE  bool
 }
 
 func (r *responseRecorder) WriteHeader(code int) {
 	r.status = code
+	ct := r.ResponseWriter.Header().Get("Content-Type")
+	if strings.HasPrefix(ct, "text/event-stream") {
+		r.isSSE = true
+	}
 	r.ResponseWriter.WriteHeader(code)
 }
 
 func (r *responseRecorder) Write(data []byte) (int, error) {
-	r.body.Write(data)
+	if !r.isSSE {
+		r.body.Write(data)
+	}
 	return r.ResponseWriter.Write(data)
+}
+
+func (r *responseRecorder) Flush() {
+	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 func logJSONMiddleware(next http.Handler) http.Handler {
@@ -188,13 +202,17 @@ func logJSONMiddleware(next http.Handler) http.Handler {
 		recorder := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
 
+		responseBody := recorder.body.String()
+		if recorder.isSSE {
+			responseBody = "[SSE stream]"
+		}
 		logJSONEvent("backend_exchange", map[string]interface{}{
 			"method":        r.Method,
 			"path":          r.URL.Path,
 			"query":         r.URL.RawQuery,
 			"request_body":  string(requestBody),
 			"status":        recorder.status,
-			"response_body": recorder.body.String(),
+			"response_body": responseBody,
 		})
 	})
 }

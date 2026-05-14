@@ -105,9 +105,32 @@ async function handleChat(req, res) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+
+    const upstreamContentType = upstream.headers.get("content-type") || "application/json";
+
+    // SSE 流式透传
+    if (upstreamContentType.startsWith("text/event-stream")) {
+      res.writeHead(upstream.status, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+      const reader = upstream.body;
+      reader.on("data", (chunk) => {
+        res.write(chunk);
+      });
+      reader.on("end", () => {
+        res.end();
+      });
+      reader.on("error", (err) => {
+        res.end();
+      });
+      return;
+    }
+
     const text = await upstream.text();
     res.writeHead(upstream.status, {
-      "Content-Type": upstream.headers.get("content-type") || "application/json",
+      "Content-Type": upstreamContentType,
     });
     res.end(text);
   } catch (error) {

@@ -75,6 +75,17 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		return resp, err
 	}
 
+	// SSE 流式响应不消费 body，避免阻塞流传输
+	isStream := strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream")
+	if isStream {
+		logJSONEvent("proxy_response_stream", map[string]interface{}{
+			"method": req.Method,
+			"url":    req.URL.String(),
+			"status": resp.StatusCode,
+		})
+		return resp, nil
+	}
+
 	var responseBody []byte
 	if resp.Body != nil {
 		responseBody, _ = io.ReadAll(resp.Body)
