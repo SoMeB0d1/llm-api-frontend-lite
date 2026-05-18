@@ -3,22 +3,22 @@
 Database file: backend/database.db
 
 ## user
-- user_id TEXT PRIMARY KEY; length 32
+- user_id INTEGER PRIMARY KEY; range 0..63
 - user_name TEXT NOT NULL; length <= 16
 - user_password TEXT NOT NULL; length <= 32
 - user_token TEXT NOT NULL; length 32
 - token_time TEXT NOT NULL; timestamp string
 
 ## conversation
-- conversation_id INTEGER PRIMARY KEY; range 0..1048575
-- user_id TEXT NOT NULL; references user(user_id)
+- conversation_id INTEGER PRIMARY KEY; range 0..4095
+- user_id INTEGER NOT NULL; references user(user_id)
 - last_edit_time TEXT NOT NULL; timestamp string
 - title TEXT NOT NULL; length <= 32
 - model TEXT NOT NULL; length <= 32
 - prompt TEXT NOT NULL; long text
 
 ## message
-- message_id INTEGER PRIMARY KEY; range 0..1073741823
+- message_id INTEGER PRIMARY KEY; range 0..8388607
 - conversation_id INTEGER NOT NULL; references conversation(conversation_id)
 - time TEXT NOT NULL; timestamp string
 - roll TEXT NOT NULL; one of {user, llm}

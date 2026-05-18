@@ -45,7 +45,7 @@ type authLoginResponse struct {
 
 const (
 	rootUserName = "root"
-	rootUserID   = "00000000000000000000000000000000"
+	rootUserID   = 0
 	rootToken    = "00000000000000000000000000000000"
 )
 
@@ -93,24 +93,24 @@ func (s *loginStore) ensureSchema() error {
 	}
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS user (
-      user_id TEXT PRIMARY KEY,
+      user_id INTEGER PRIMARY KEY,
       user_name TEXT NOT NULL,
       user_password TEXT NOT NULL,
       user_token TEXT NOT NULL,
 	token_time TEXT NOT NULL,
-      CHECK (length(user_id) = 32),
+	CHECK (user_id BETWEEN 0 AND 63),
 	CHECK (length(user_name) <= 16),
 	CHECK (length(user_password) <= 32),
       CHECK (length(user_token) = 32)
     );`,
 		`CREATE TABLE IF NOT EXISTS conversation (
 			conversation_id INTEGER PRIMARY KEY,
-			user_id TEXT NOT NULL,
+			user_id INTEGER NOT NULL,
 			last_edit_time TEXT NOT NULL,
 			title TEXT NOT NULL,
 			model TEXT NOT NULL,
 			prompt TEXT NOT NULL,
-			CHECK (conversation_id BETWEEN 0 AND 1048575),
+			CHECK (conversation_id BETWEEN 0 AND 4095),
 			CHECK (length(title) <= 32),
 			CHECK (length(model) <= 32),
 			FOREIGN KEY (user_id) REFERENCES user(user_id)
@@ -121,7 +121,7 @@ func (s *loginStore) ensureSchema() error {
 			time TEXT NOT NULL,
 			roll TEXT NOT NULL,
 			context TEXT NOT NULL,
-			CHECK (message_id BETWEEN 0 AND 1073741823),
+			CHECK (message_id BETWEEN 0 AND 8388607),
 			CHECK (roll IN ('user', 'llm')),
 			FOREIGN KEY (conversation_id) REFERENCES conversation(conversation_id)
 		);`,
