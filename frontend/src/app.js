@@ -454,15 +454,24 @@ function renderHistory() {
   });
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function renderMarkdown(text) {
   if (window.marked) {
     return window.marked.parse(text, { breaks: true });
   }
-  return text
-    .replace(/&/g, "&")
-    .replace(/</g, "<")
-    .replace(/>/g, ">")
-    .replace(/\n/g, "<br>");
+  return escapeHtml(text).replace(/\n/g, "<br>");
+}
+
+function renderPlainText(text) {
+  return escapeHtml(text).replace(/\n/g, "<br>");
 }
 
 function createActionButton(icon, label, onClick) {
@@ -487,7 +496,8 @@ function renderMessage(role, content) {
   wrapper.dataset.raw = content;
   const bubble = document.createElement("div");
   bubble.className = "bubble";
-  bubble.innerHTML = renderMarkdown(content);
+  const isUser = role === "user";
+  bubble.innerHTML = isUser ? renderPlainText(content) : renderMarkdown(content);
   bubble.dataset.raw = content;
   const meta = document.createElement("div");
   meta.className = "message-meta";
