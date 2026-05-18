@@ -463,8 +463,45 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+let markedReady = false;
+
+function setupMarkedRenderer() {
+  if (markedReady || !window.marked) {
+    return;
+  }
+  const renderer = new window.marked.Renderer();
+  renderer.code = (code, infostring) => {
+    let rawCode = code;
+    let rawLang = infostring;
+    if (rawCode && typeof rawCode === "object") {
+      rawLang = rawCode.lang || rawCode.language || rawLang;
+      rawCode = rawCode.text ?? "";
+    }
+    const langValue = typeof rawLang === "string" ? rawLang : "";
+    const langLabel = langValue.trim().split(/\s+/)[0] || "text";
+    const langClass = langLabel.replace(/[^a-z0-9_+-]/gi, "") || "text";
+    const encoded = encodeURIComponent(String(rawCode ?? ""));
+    return `
+<div class="code-block">
+  <div class="code-block__header">
+    <span class="code-block__lang">${escapeHtml(langLabel)}</span>
+    <button class="code-copy" type="button" data-code="${encoded}" aria-label="Copy code">Copy</button>
+  </div>
+  <pre><code class="language-${escapeHtml(langClass)}">${escapeHtml(String(rawCode ?? ""))}</code></pre>
+</div>`;
+  };
+  const options = { gfm: true, breaks: true, renderer };
+  if (typeof window.marked.use === "function") {
+    window.marked.use(options);
+  } else if (typeof window.marked.setOptions === "function") {
+    window.marked.setOptions(options);
+  }
+  markedReady = true;
+}
+
 function renderMarkdown(text) {
   if (window.marked) {
+    setupMarkedRenderer();
     return window.marked.parse(text, { breaks: true });
   }
   return escapeHtml(text).replace(/\n/g, "<br>");
@@ -497,7 +534,12 @@ function renderMessage(role, content) {
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   const isUser = role === "user";
-  bubble.innerHTML = isUser ? renderPlainText(content) : renderMarkdown(content);
+  if (!isUser && content === "...") {
+    bubble.innerHTML =
+      '<div class="loading-token"><img src="resources/loading_token.svg" alt="Loading" /></div>';
+  } else {
+    bubble.innerHTML = isUser ? renderPlainText(content) : renderMarkdown(content);
+  }
   bubble.dataset.raw = content;
   const meta = document.createElement("div");
   meta.className = "message-meta";
@@ -965,6 +1007,23 @@ function initEvents() {
       if (elements.sidebar && elements.sidebar.classList.contains("open")) {
         hideSidebarMobile();
       }
+    });
+  }
+
+  if (elements.chatHistory) {
+    elements.chatHistory.addEventListener("click", (event) => {
+      const target = event.target.closest(".code-copy");
+      if (!target) {
+        return;
+      }
+      const encoded = target.dataset.code || "";
+      let decoded = encoded;
+      try {
+        decoded = decodeURIComponent(encoded);
+      } catch (error) {
+        decoded = encoded;
+      }
+      copyToClipboard(decoded);
     });
   }
 

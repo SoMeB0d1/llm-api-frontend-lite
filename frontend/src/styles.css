@@ -368,6 +368,72 @@ body {
   padding: 4px 0;
 }
 
+.loading-token {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 14px;
+  background: #f2f4f8;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.loading-token img {
+  width: 20px;
+  height: 20px;
+}
+
+.code-block {
+  border: 1px solid var(--border);
+  background: #f2f4f8;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.code-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px;
+  background: rgba(16, 34, 58, 0.04);
+  border-bottom: 1px solid var(--border);
+}
+
+.code-block__lang {
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.code-copy {
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.code-copy:hover {
+  transform: translateY(-1px);
+  background: #e9f2ff;
+  border-color: rgba(16, 34, 58, 0.35);
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #0b1a2b;
+}
+
 .message-meta {
   font-size: 11px;
   color: var(--muted);
