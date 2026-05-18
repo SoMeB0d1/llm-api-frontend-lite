@@ -1,9 +1,7 @@
 package main
 
 import (
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -87,11 +85,6 @@ func handleHistoryTopic(store *loginStore) http.Handler {
 			return
 		}
 
-		if len(items) == 0 {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(items)
 	})
@@ -131,12 +124,6 @@ func handleHistory(store *loginStore) http.Handler {
 			payload.UserID,
 		).Scan(&exists)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				writeJSON(w, http.StatusNotFound, map[string]string{
-					"error": "user_not_found",
-				})
-				return
-			}
 			log.Printf("history user lookup failed: %v", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{
 				"error": "db_error",

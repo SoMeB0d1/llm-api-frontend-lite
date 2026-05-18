@@ -753,8 +753,9 @@ async function loadHistory() {
   }
   clearTimeout(timeout);
 
-  if (response.status === 404) {
-    handleInvalidUserId();
+  if (response.status === 500) {
+    alert("出现问题，请联系管理员");
+    setStatus("History unavailable");
     return;
   }
   if (!response.ok) {
@@ -793,8 +794,10 @@ async function loadConversation(conversationId) {
       },
       body: JSON.stringify({ conversation_id: conversationId }),
     });
-    if (response.status === 404) {
-      handleInvalidConversationId();
+    if (response.status === 500) {
+      alert("出现问题，请联系管理员");
+      showToast("加载对话失败");
+      setStatus("Ready");
       return;
     }
     if (!response.ok) {

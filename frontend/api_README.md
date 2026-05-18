@@ -75,8 +75,8 @@
 [{"message_id":1,"time":"<string>","roll":"<string>","context":"<string>"}]
 ```
 - 错误处理：
-  - 后端找不到 conversation_id 时返回 404
-  - 前端收到 404 后清除 localStorage 中的 userId 和 token，弹窗提示，输出 console error，跳转至 login.html
+  - 后端数据库查询失败时返回 500 `{ "error": "db_error" }`
+  - 前端收到 500 后弹窗提示“出现问题，请联系管理员”
 
 ## 模型列表
 
