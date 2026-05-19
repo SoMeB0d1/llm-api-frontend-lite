@@ -3,7 +3,7 @@ const state = {
   token: "",
   userId: "guest",
   userName: "guest",
-  conversationId: 0,
+  conversationId: -1,
   model: "deepseek-v4-flash",
   isNewChat: true,
   history: [],
@@ -381,7 +381,7 @@ function loadStoredState() {
       state.history = [];
     }
   }
-  state.conversationId = newConversationId();
+  state.conversationId = -1;
   setNewChatState(true);
 }
 
@@ -839,7 +839,7 @@ async function loadConversation(conversationId) {
     const resolvedConversationId = Number(conversationId);
     state.conversationId = Number.isFinite(resolvedConversationId)
       ? resolvedConversationId
-      : newConversationId();
+      : -1;
     setNewChatState(false);
     setStatus("Ready");
   } catch (error) {
@@ -959,7 +959,7 @@ async function sendPrompt(prompt, placeholder) {
 
 function resetChat() {
   elements.chatHistory.innerHTML = "";
-  state.conversationId = newConversationId();
+  state.conversationId = -1;
   setNewChatState(true);
 }
 

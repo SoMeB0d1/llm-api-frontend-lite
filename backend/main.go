@@ -94,7 +94,7 @@ func main() {
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
 
-	mux.Handle("/chat", withCORS(handleChat(upstreamBase, apiKey)))
+	mux.Handle("/chat", withCORS(handleChat(upstreamBase, apiKey, store)))
 	mux.Handle("/history", withCORS(handleHistory(store)))
 	mux.Handle("/history/topic", withCORS(handleHistoryTopic(store)))
 	mux.Handle("/auth/login", withCORS(handleAuthLogin(store)))

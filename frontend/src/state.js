@@ -63,7 +63,7 @@ function loadStoredState() {
       state.history = [];
     }
   }
-  state.conversationId = newConversationId();
+  state.conversationId = -1;
   setNewChatState(true);
 }
 

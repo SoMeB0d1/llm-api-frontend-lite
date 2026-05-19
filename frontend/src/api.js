@@ -155,7 +155,7 @@ async function loadConversation(conversationId) {
     const resolvedConversationId = Number(conversationId);
     state.conversationId = Number.isFinite(resolvedConversationId)
       ? resolvedConversationId
-      : newConversationId();
+      : -1;
     setNewChatState(false);
   } catch (error) {
     showToast("加载历史记录失败");
