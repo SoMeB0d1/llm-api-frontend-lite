@@ -125,10 +125,3 @@ function handleInvalidUserId() {
   window.location.href = "/login/login.html";
 }
 
-function handleInvalidConversationId() {
-  localStorage.removeItem(STORAGE_KEYS.userId);
-  localStorage.removeItem(STORAGE_KEYS.token);
-  alert("出现错误，请联系管理员");
-  console.error("error: invalid conversation_id");
-  window.location.href = "/login/login.html";
-}

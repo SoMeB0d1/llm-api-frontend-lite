@@ -235,6 +235,10 @@ function showToast(message, variant = "error") {
   }, 1800);
 }
 
+function handleServerError() {
+  showToast("出现问题，请联系管理员");
+}
+
 async function copyToClipboard(text) {
   if (!text) {
     return;
@@ -441,14 +445,6 @@ function handleInvalidUserId() {
   window.location.href = "/login/login.html";
 }
 
-function handleInvalidConversationId() {
-  localStorage.removeItem(STORAGE_KEYS.userId);
-  localStorage.removeItem(STORAGE_KEYS.token);
-  alert("出现错误，请联系管理员");
-  console.error("error: invalid conversation_id");
-  window.location.href = "/login/login.html";
-}
-
 function renderHistory() {
   elements.historyList.innerHTML = "";
   if (!state.history.length) {
@@ -628,6 +624,10 @@ async function apiFetch(path, options = {}) {
   });
   clearTimeout(timeout);
   if (!response.ok) {
+    if (response.status === 500) {
+      handleServerError();
+      throw new Error("server_error");
+    }
     let message = `HTTP ${response.status}`;
     try {
       const text = await response.text();
@@ -704,6 +704,9 @@ async function fetchModelsIfAllowed() {
     const models = normalizeModelList(data);
     applyModelOptions(models);
   } catch (error) {
+    if (error?.message === "server_error") {
+      return;
+    }
     showToast("模型列表获取失败");
     console.error(error);
   } finally {
@@ -729,6 +732,10 @@ async function validateToken() {
       } catch (error) {
         data = {};
       }
+    }
+    if (response.status === 500) {
+      handleServerError();
+      return false;
     }
     if (!response.ok || data.token_valid !== true) {
       return false;
@@ -769,7 +776,7 @@ async function loadHistory() {
   clearTimeout(timeout);
 
   if (response.status === 500) {
-    alert("出现问题，请联系管理员");
+    handleServerError();
     setStatus("History unavailable");
     return;
   }
@@ -810,8 +817,7 @@ async function loadConversation(conversationId) {
       body: JSON.stringify({ conversation_id: conversationId }),
     });
     if (response.status === 500) {
-      alert("出现问题，请联系管理员");
-      showToast("加载对话失败");
+      handleServerError();
       setStatus("Ready");
       return;
     }
@@ -869,6 +875,9 @@ async function fetchStream(prompt, placeholder) {
   }
   clearTimeout(timeout);
   if (!response.ok) {
+    if (response.status === 500) {
+      handleServerError();
+    }
     return null;
   }
   const contentType = response.headers.get("content-type") || "";

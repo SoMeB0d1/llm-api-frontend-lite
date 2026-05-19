@@ -141,7 +141,10 @@ func (s *loginStore) ensureSchema() error {
 			return err
 		}
 	}
-	return s.ensureTokenTimeColumn()
+	if err := s.ensureTokenTimeColumn(); err != nil {
+		return err
+	}
+	return s.ensureConversationSeed()
 }
 
 func (s *loginStore) ensureTokenTimeColumn() error {
@@ -180,6 +183,41 @@ func (s *loginStore) ensureTokenTimeColumn() error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err = s.db.Exec(`UPDATE user SET token_time = ? WHERE token_time = '' OR token_time IS NULL`, now)
 	return err
+}
+
+func (s *loginStore) ensureConversationSeed() error {
+	if s == nil || s.db == nil {
+		return errors.New("login store not initialized")
+	}
+	var count int
+	if err := s.db.QueryRow("SELECT COUNT(1) FROM conversation").Scan(&count); err != nil {
+		return err
+	}
+	if count != 0 {
+		return nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`INSERT INTO conversation (conversation_id, user_id, last_edit_time, title, model, prompt)
+    VALUES (?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+
+	for id := 0; id <= 4095; id++ {
+		title := fmt.Sprintf("notused_conversation_%d", id)
+		if _, err := stmt.Exec(id, 0, now, title, "deepseek-v4-flash", "0"); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *loginStore) ensureRootUser(password string) error {
@@ -276,9 +314,7 @@ func handleAuthToken(store *loginStore) http.Handler {
 				return
 			}
 			log.Printf("auth token query failed: %v", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{
-				"error": "db_error",
-			})
+			writeJSON(w, http.StatusOK, authTokenResponse{TokenValid: false})
 			return
 		}
 
@@ -349,9 +385,7 @@ func handleAuthLogin(store *loginStore) http.Handler {
 				return
 			}
 			log.Printf("auth login query failed: %v", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{
-				"error": "db_error",
-			})
+			writeJSON(w, http.StatusOK, authLoginResponse{UserExist: false, PswRight: false})
 			return
 		}
 
@@ -363,9 +397,7 @@ func handleAuthLogin(store *loginStore) http.Handler {
 		newToken, err := store.generateUniqueToken(32)
 		if err != nil {
 			log.Printf("login token generate failed: %v", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{
-				"error": "token_error",
-			})
+			writeJSON(w, http.StatusOK, authLoginResponse{UserExist: true, PswRight: false})
 			return
 		}
 		if _, err := store.db.Exec(
@@ -375,9 +407,7 @@ func handleAuthLogin(store *loginStore) http.Handler {
 			userID,
 		); err != nil {
 			log.Printf("login token update failed: %v", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{
-				"error": "token_update_error",
-			})
+			writeJSON(w, http.StatusOK, authLoginResponse{UserExist: true, PswRight: false})
 			return
 		}
 

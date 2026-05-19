@@ -181,6 +181,78 @@ func streamUpstream(ctx context.Context, baseURL, apiKey string, payload ChatReq
 	}
 }
 
+func (s *loginStore) createConversation(userID int64, model, prompt string) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, errors.New("login store not initialized")
+	}
+	var conversationID int64
+	err := retryLocked(6, 400*time.Millisecond, func() error {
+		tx, txErr := s.db.Begin()
+		if txErr != nil {
+			return txErr
+		}
+		defer func() {
+			if txErr != nil {
+				_ = tx.Rollback()
+			}
+		}()
+
+		txErr = tx.QueryRow(
+			`SELECT conversation_id FROM conversation
+      ORDER BY last_edit_time ASC
+      LIMIT 1`,
+		).Scan(&conversationID)
+		if txErr != nil {
+			_ = tx.Rollback()
+			return txErr
+		}
+
+		now := time.Now().UTC().Format(time.RFC3339)
+		_, txErr = tx.Exec(
+			`UPDATE conversation
+     SET user_id = ?, last_edit_time = ?, title = ?, model = ?, prompt = ?
+     WHERE conversation_id = ?`,
+			userID,
+			now,
+			"new_conversation",
+			model,
+			prompt,
+			conversationID,
+		)
+		if txErr != nil {
+			_ = tx.Rollback()
+			return txErr
+		}
+
+		_, txErr = tx.Exec(
+			`DELETE FROM files WHERE message_id IN (
+      SELECT message_id FROM message WHERE conversation_id = ?
+    )`,
+			conversationID,
+		)
+		if txErr != nil {
+			_ = tx.Rollback()
+			return txErr
+		}
+
+		_, txErr = tx.Exec(
+			`DELETE FROM message WHERE conversation_id = ?`,
+			conversationID,
+		)
+		if txErr != nil {
+			_ = tx.Rollback()
+			return txErr
+		}
+
+		txErr = tx.Commit()
+		return txErr
+	})
+	if err != nil {
+		return 0, err
+	}
+	return conversationID, nil
+}
+
 func handleChat(baseURL, apiKey string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

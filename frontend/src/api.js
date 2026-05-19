@@ -52,9 +52,6 @@ async function fetchHistory() {
       }),
     });
     const text = await response.text();
-    if (response.status === 500) {
-      alert("出现问题，请联系管理员");
-    }
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -92,9 +89,6 @@ async function loadConversationTopics() {
       }),
     });
     const text = await response.text();
-    if (response.status === 500) {
-      alert("出现问题，请联系管理员");
-    }
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -133,9 +127,6 @@ async function loadConversation(conversationId) {
       }),
     });
     const text = await response.text();
-    if (response.status === 500) {
-      alert("出现问题，请联系管理员");
-    }
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
