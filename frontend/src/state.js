@@ -21,14 +21,29 @@ const state = {
   token: "",
   userId: "guest",
   userName: "guest",
-  topicId: "",
+  conversationId: -1,
   model: "deepseek-v4-flash",
   isNewChat: true,
   history: [],
 };
 
-function newTopicId() {
-  return `topic-${Date.now()}`;
+const MAX_CONVERSATION_ID = 4095;
+
+function newConversationId() {
+  let maxId = -1;
+  if (Array.isArray(state.history)) {
+    state.history.forEach((item) => {
+      const value = Number(item?.conversation_id);
+      if (Number.isFinite(value) && value > maxId) {
+        maxId = value;
+      }
+    });
+  }
+  const next = maxId + 1;
+  if (next < 0 || next > MAX_CONVERSATION_ID) {
+    return 0;
+  }
+  return next;
 }
 
 function loadStoredState() {
@@ -48,7 +63,7 @@ function loadStoredState() {
       state.history = [];
     }
   }
-  state.topicId = newTopicId();
+  state.conversationId = newConversationId();
   setNewChatState(true);
 }
 

@@ -42,11 +42,11 @@
 - 调用位置：主聊天页（[frontend/src/app.js](frontend/src/app.js)）
 - 请求体：
 ```json
-{"userId":"<string>","topicId":"<string>","model":"<string>","message":"<string>"}
+{"userId":"<string>","conversationId":123,"model":"<string>","message":"<string>"}
 ```
 - 期望响应字段：
 ```json
-{"answer":"<string>"}
+{"answer":"<string>","conversationId":123}
 ```
 
 ### POST /history

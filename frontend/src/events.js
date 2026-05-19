@@ -12,7 +12,7 @@ function attachEvents() {
       return;
     }
     elements.chatHistory.innerHTML = "";
-    state.topicId = newTopicId();
+    state.conversationId = newConversationId();
     setNewChatState(true);
   });
 

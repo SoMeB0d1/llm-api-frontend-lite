@@ -13,15 +13,16 @@ import (
 )
 
 type ChatRequest struct {
-	UserID  string `json:"userId"`
-	TopicID string `json:"topicId"`
-	Model   string `json:"model"`
-	Message string `json:"message"`
+	UserID         string `json:"userId"`
+	ConversationID int64  `json:"conversationId"`
+	Model          string `json:"model"`
+	Message        string `json:"message"`
 }
 
 type ChatResponse struct {
-	Answer string `json:"answer"`
-	Model  string `json:"model"`
+	Answer         string `json:"answer"`
+	Model          string `json:"model"`
+	ConversationID int64  `json:"conversationId"`
 }
 
 type upstreamMessage struct {
@@ -51,7 +52,7 @@ func translate(input string) string {
 
 func buildUpstreamRequest(payload ChatRequest, stream bool) upstreamRequest {
 	translated := translate(payload.Message)
-	systemNote := fmt.Sprintf("user_id=%s; topic_id=%s; requested_model=%s", payload.UserID, payload.TopicID, payload.Model)
+	systemNote := fmt.Sprintf("user_id=%s; conversation_id=%d; requested_model=%s", payload.UserID, payload.ConversationID, payload.Model)
 	return upstreamRequest{
 		Model: "deepseek-v4-flash",
 		Messages: []upstreamMessage{
@@ -140,7 +141,7 @@ func streamUpstream(ctx context.Context, baseURL, apiKey string, payload ChatReq
 			return false, fmt.Errorf("non-stream parse error: %w", err)
 		}
 		answer := parsed.Choices[0].Message.Content
-		response := ChatResponse{Answer: answer, Model: "deepseek-v4-flash"}
+		response := ChatResponse{Answer: answer, Model: "deepseek-v4-flash", ConversationID: payload.ConversationID}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)
 		return false, nil
@@ -222,7 +223,7 @@ func handleChat(baseURL, apiKey string) http.Handler {
 			return
 		}
 
-		response := ChatResponse{Answer: answer, Model: "deepseek-v4-flash"}
+		response := ChatResponse{Answer: answer, Model: "deepseek-v4-flash", ConversationID: payload.ConversationID}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)
 	})

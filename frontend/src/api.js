@@ -13,12 +13,10 @@ async function sendPrompt(prompt) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      prompt: prompt,
-      user_id: state.userId,
-      token: state.token,
+      userId: state.userId,
+      conversationId: state.conversationId,
       model: state.model,
-      topic_id: state.topicId,
-      new_topic: state.isNewChat,
+      message: prompt,
     }),
   });
   const text = await response.text();
@@ -33,6 +31,9 @@ async function sendPrompt(prompt) {
   if (!response.ok) {
     const message = data.error || data.message || `HTTP ${response.status}`;
     throw new Error(message);
+  }
+  if (typeof data.conversationId === "number") {
+    state.conversationId = data.conversationId;
   }
   return data.answer || "";
 }
@@ -160,12 +161,10 @@ async function loadConversation(conversationId) {
         renderMessage(role, content);
       }
     });
-    const firstUser = messages.find((m) => m.role === "assistant");
-    if (firstUser) {
-      state.topicId = firstUser.topic_id || firstUser.topicId || newTopicId();
-    } else {
-      state.topicId = newTopicId();
-    }
+    const resolvedConversationId = Number(conversationId);
+    state.conversationId = Number.isFinite(resolvedConversationId)
+      ? resolvedConversationId
+      : newConversationId();
     setNewChatState(false);
   } catch (error) {
     showToast("加载历史记录失败");

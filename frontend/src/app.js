@@ -3,7 +3,7 @@ const state = {
   token: "",
   userId: "guest",
   userName: "guest",
-  topicId: "",
+  conversationId: 0,
   model: "deepseek-v4-flash",
   isNewChat: true,
   history: [],
@@ -50,8 +50,23 @@ const STORAGE_KEYS = {
   history: "llm.history",
 };
 
-function newTopicId() {
-  return `topic-${Date.now()}`;
+const MAX_CONVERSATION_ID = 4095;
+
+function newConversationId() {
+  let maxId = -1;
+  if (Array.isArray(state.history)) {
+    state.history.forEach((item) => {
+      const value = Number(item?.conversation_id);
+      if (Number.isFinite(value) && value > maxId) {
+        maxId = value;
+      }
+    });
+  }
+  const next = maxId + 1;
+  if (next < 0 || next > MAX_CONVERSATION_ID) {
+    return 0;
+  }
+  return next;
 }
 
 function setStatus(text) {
@@ -362,7 +377,7 @@ function loadStoredState() {
       state.history = [];
     }
   }
-  state.topicId = newTopicId();
+  state.conversationId = newConversationId();
   setNewChatState(true);
 }
 
@@ -815,7 +830,10 @@ async function loadConversation(conversationId) {
       const role = msg.roll === "llm" ? "assistant" : "user";
       renderMessage(role, msg.context || "");
     });
-    state.topicId = `topic-${conversationId}`;
+    const resolvedConversationId = Number(conversationId);
+    state.conversationId = Number.isFinite(resolvedConversationId)
+      ? resolvedConversationId
+      : newConversationId();
     setNewChatState(false);
     setStatus("Ready");
   } catch (error) {
@@ -839,7 +857,7 @@ async function fetchStream(prompt, placeholder) {
       headers,
       body: JSON.stringify({
         userId: state.userId,
-        topicId: state.topicId,
+        conversationId: state.conversationId,
         model: state.model,
         message: prompt,
       }),
@@ -858,6 +876,9 @@ async function fetchStream(prompt, placeholder) {
     // 上游返回非 SSE（JSON），直接解析，避免二次请求
     try {
       const json = await response.json();
+      if (typeof json.conversationId === "number") {
+        state.conversationId = json.conversationId;
+      }
       return json.answer || "(no response)";
     } catch (e) {
       return null;
@@ -915,18 +936,21 @@ async function sendPrompt(prompt, placeholder) {
     method: "POST",
     body: JSON.stringify({
       userId: state.userId,
-      topicId: state.topicId,
+      conversationId: state.conversationId,
       model: state.model,
       message: prompt,
     }),
   });
+  if (typeof response.conversationId === "number") {
+    state.conversationId = response.conversationId;
+  }
   setStatus("Ready");
   return response.answer || "(no response)";
 }
 
 function resetChat() {
   elements.chatHistory.innerHTML = "";
-  state.topicId = newTopicId();
+  state.conversationId = newConversationId();
   setNewChatState(true);
 }
 
