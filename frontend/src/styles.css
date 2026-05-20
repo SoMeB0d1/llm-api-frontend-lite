@@ -557,6 +557,10 @@ body {
   z-index: 10;
 }
 
+.modal[hidden] {
+  display: none !important;
+}
+
 .modal-card {
   background: #fff;
   border-radius: var(--radius-lg);
@@ -565,6 +569,82 @@ body {
   display: grid;
   gap: 16px;
   box-shadow: var(--shadow);
+}
+
+.modal-card--settings {
+  width: min(960px, 88vw);
+  height: min(78vh, 760px);
+  padding: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+.settings-modal__header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.settings-tab {
+  border: none;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: 14px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.settings-tab:hover {
+  color: var(--ink);
+}
+
+.settings-tab.is-active {
+  color: var(--ink);
+  border-bottom-color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.settings-close {
+  border: none;
+  background: transparent;
+  padding: 4px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.settings-close img {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-modal__body {
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+}
+
+.settings-panel {
+  display: none;
+}
+
+.settings-panel.is-active {
+  display: grid;
+  gap: 16px;
 }
 
 .modal-title {
@@ -594,6 +674,29 @@ body {
   border-radius: 12px;
   border: 1px solid var(--border);
   font-size: 14px;
+}
+
+.field textarea {
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 96px;
+}
+
+.field textarea:disabled {
+  background: #eef2f8;
+  color: #7a8aa3;
+}
+
+.settings-logout-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
 }
 
 .button-row {

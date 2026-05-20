@@ -37,6 +37,14 @@ const elements = {
   userId: document.getElementById("userId"),
   toast: document.getElementById("toast"),
   settingsModal: document.getElementById("settingsModal"),
+  settingsCloseBtn: document.getElementById("settingsCloseBtn"),
+  settingsTabs: document.getElementById("settingsTabs"),
+  settingsTabModel: document.getElementById("settingsTabModel"),
+  settingsTabRoot: document.getElementById("settingsTabRoot"),
+  settingsPanelModel: document.getElementById("settingsPanelModel"),
+  settingsPanelRoot: document.getElementById("settingsPanelRoot"),
+  systemPromptInput: document.getElementById("systemPromptInput"),
+  logoutBtn: document.getElementById("logoutBtn"),
   settingsForm: document.getElementById("settingsForm"),
   apiBaseUrl: document.getElementById("apiBaseUrl"),
   clearCacheBtn: document.getElementById("clearCacheBtn"),
@@ -51,6 +59,7 @@ const STORAGE_KEYS = {
 };
 
 const MAX_CONVERSATION_ID = 4095;
+const DEFAULT_SYSTEM_PROMPT = "You are an assistant. ";
 
 function newConversationId() {
   let maxId = -1;
@@ -78,6 +87,7 @@ function setNewChatState(isNew) {
   if (elements.modelSelect) {
     elements.modelSelect.disabled = !isNew;
   }
+  syncSystemPromptInputState();
 }
 
 function setSendButtonState(loading) {
@@ -437,6 +447,53 @@ function toggleModal(modal, show) {
   modal.hidden = !show;
 }
 
+function syncSystemPromptInputState() {
+  if (!elements.systemPromptInput) {
+    return;
+  }
+  if (!elements.systemPromptInput.value.trim()) {
+    elements.systemPromptInput.value = DEFAULT_SYSTEM_PROMPT;
+  }
+  elements.systemPromptInput.disabled = !state.isNewChat;
+}
+
+function isRootUser() {
+  const storedUserName = localStorage.getItem(STORAGE_KEYS.userName) || "";
+  return String(storedUserName).toLowerCase() === "root";
+}
+
+function applyRootSettingsVisibility() {
+  const canSeeRoot = isRootUser();
+  if (elements.settingsTabRoot) {
+    elements.settingsTabRoot.hidden = !canSeeRoot;
+  }
+  if (elements.settingsPanelRoot) {
+    elements.settingsPanelRoot.hidden = !canSeeRoot;
+  }
+  if (!canSeeRoot) {
+    switchSettingsTab("model");
+  }
+}
+
+function switchSettingsTab(tabName) {
+  const isRootTab = tabName === "root";
+  const canSeeRoot = isRootUser();
+  const resolvedTab = isRootTab && canSeeRoot ? "root" : "model";
+
+  if (elements.settingsTabModel) {
+    elements.settingsTabModel.classList.toggle("is-active", resolvedTab === "model");
+  }
+  if (elements.settingsTabRoot) {
+    elements.settingsTabRoot.classList.toggle("is-active", resolvedTab === "root");
+  }
+  if (elements.settingsPanelModel) {
+    elements.settingsPanelModel.classList.toggle("is-active", resolvedTab === "model");
+  }
+  if (elements.settingsPanelRoot) {
+    elements.settingsPanelRoot.classList.toggle("is-active", resolvedTab === "root");
+  }
+}
+
 function formatSummary(item) {
   return item.title || item.summary || "(no title)";
 }
@@ -629,6 +686,7 @@ function setUserId(id, name) {
   state.userId = id || state.userId || "guest";
   state.userName = name || state.userName || "guest";
   elements.userId.textContent = state.userName;
+  applyRootSettingsVisibility();
   saveAuth();
 }
 
@@ -1033,10 +1091,28 @@ function initEvents() {
     });
   }
 
-  if (elements.settingsBtn && elements.settingsModal && elements.apiBaseUrl) {
+  if (elements.settingsBtn && elements.settingsModal) {
     elements.settingsBtn.addEventListener("click", () => {
-      elements.apiBaseUrl.value = state.baseUrl;
+      applyRootSettingsVisibility();
+      syncSystemPromptInputState();
+      switchSettingsTab("model");
       toggleModal(elements.settingsModal, true);
+    });
+  }
+
+  if (elements.settingsCloseBtn && elements.settingsModal) {
+    elements.settingsCloseBtn.addEventListener("click", () => {
+      toggleModal(elements.settingsModal, false);
+    });
+  }
+
+  if (elements.settingsTabs) {
+    elements.settingsTabs.addEventListener("click", (event) => {
+      const target = event.target.closest(".settings-tab");
+      if (!target) {
+        return;
+      }
+      switchSettingsTab(target.dataset.tab);
     });
   }
 
@@ -1110,22 +1186,12 @@ function initEvents() {
     }
   });
 
-  if (elements.settingsForm) {
-    elements.settingsForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const url = elements.apiBaseUrl.value.trim();
-      if (url) {
-        setBaseUrl(url);
-      }
-      toggleModal(elements.settingsModal, false);
-    });
-  }
-
-  if (elements.clearCacheBtn) {
-    elements.clearCacheBtn.addEventListener("click", () => {
-      localStorage.removeItem(STORAGE_KEYS.history);
-      state.history = [];
-      renderHistory();
+  if (elements.logoutBtn) {
+    elements.logoutBtn.addEventListener("click", () => {
+      localStorage.removeItem(STORAGE_KEYS.token);
+      localStorage.removeItem(STORAGE_KEYS.userId);
+      localStorage.removeItem(STORAGE_KEYS.userName);
+      window.location.href = "/token_check/token_check.html";
     });
   }
 
@@ -1198,6 +1264,9 @@ function initEvents() {
 async function bootstrap() {
   loadStoredState();
   setUserId(state.userId, state.userName);
+  syncSystemPromptInputState();
+  toggleModal(elements.settingsModal, false);
+  applyRootSettingsVisibility();
   setBaseUrl(state.baseUrl);
   initEvents();
   const isValid = await validateToken();

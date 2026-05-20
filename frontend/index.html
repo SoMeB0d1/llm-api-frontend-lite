@@ -37,11 +37,11 @@
           </div>
           <div class="user-id" id="userId">guest</div>
           <button class="ghost-button" id="settingsBtn" type="button">
-            Settings
+            设置
           </button>
         </div>
         <button class="primary-button" id="newChatBtn" type="button">
-          New Chat
+          创建新对话
         </button>
         <div class="history">
           <div class="history-title">History</div>
@@ -77,47 +77,65 @@
       </main>
     </div>
 
-    <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-    <!--
-    <div class="modal" id="loginModal" hidden>
-      <div class="modal-card">
-        <div class="modal-title">Sign in</div>
-        <p class="modal-subtitle">Use your account to start chatting.</p>
-        <form id="loginForm">
-          <label class="field">
-            <span>Username</span>
-            <input id="loginUsername" type="text" required />
-          </label>
-          <label class="field">
-            <span>Password</span>
-            <input id="loginPassword" type="password" required />
-          </label>
-          <button class="primary-button" type="submit">Sign in</button>
-        </form>
-      </div>
-    </div>
-
     <div class="modal" id="settingsModal" hidden>
-      <div class="modal-card">
-        <div class="modal-title">Settings</div>
-        <p class="modal-subtitle">Configure API endpoint and cache.</p>
-        <form id="settingsForm">
-          <label class="field">
-            <span>API Base URL</span>
-            <input id="apiBaseUrl" type="text" placeholder="http://localhost:4587" />
-          </label>
-          <div class="button-row">
-            <button class="primary-button" type="submit">Save</button>
-            <button class="ghost-button" id="clearCacheBtn" type="button">
-              Clear History Cache
+      <div class="modal-card modal-card--settings" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+        <div class="settings-modal__header">
+          <div class="settings-tabs" id="settingsTabs">
+            <button
+              class="settings-tab is-active"
+              id="settingsTabModel"
+              type="button"
+              data-tab="model"
+            >
+              模型设置
+            </button>
+            <button
+              class="settings-tab"
+              id="settingsTabRoot"
+              type="button"
+              data-tab="root"
+            >
+              root设置
             </button>
           </div>
-        </form>
+          <button
+            class="settings-close"
+            id="settingsCloseBtn"
+            type="button"
+            aria-label="关闭设置"
+          >
+            <img src="resources/cross.svg" alt="" />
+          </button>
+        </div>
+
+        <div class="settings-modal__body">
+          <section class="settings-panel is-active" id="settingsPanelModel" data-panel="model">
+            <h2 class="modal-title" id="settingsModalTitle">模型设置</h2>
+            <p class="modal-subtitle">配置当前会话的系统提示词</p>
+            <div class="button-row">
+              <label class="field">
+                Prompt
+                <textarea
+                  id="systemPromptInput"
+                  rows="4"
+                  placeholder="You are an assistant. "
+                >You are an assistant. </textarea>
+              </label>
+              <div class="settings-logout-wrap">
+                <button class="ghost-button" type="button" id="logoutBtn">退出登录</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-panel" id="settingsPanelRoot" data-panel="root">
+            <h2 class="modal-title">root设置</h2>
+            <p class="modal-subtitle">当前为 root 管理页（可按需扩展）。</p>
+          </section>
+        </div>
       </div>
     </div>
-    -->
 
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js"></script>
     <script
