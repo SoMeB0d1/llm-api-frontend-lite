@@ -18,6 +18,7 @@ import (
 
 type loginStore struct {
 	db *sql.DB
+	ro *sql.DB
 }
 
 type authTokenRequest struct {
@@ -84,7 +85,32 @@ func openLoginStore() (*loginStore, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	ro, err := openReadOnlyDB(dbPath)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	store.ro = ro
 	return store, nil
+}
+
+func openReadOnlyDB(dbPath string) (*sql.DB, error) {
+	uriPath := filepath.ToSlash(dbPath)
+	if strings.HasPrefix(uriPath, "//") {
+		uriPath = strings.TrimPrefix(uriPath, "/")
+	}
+	dsn := fmt.Sprintf("file:%s?mode=ro", uriPath)
+	ro, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	ro.SetMaxOpenConns(1)
+	ro.SetMaxIdleConns(1)
+	if err := ro.Ping(); err != nil {
+		_ = ro.Close()
+		return nil, err
+	}
+	return ro, nil
 }
 
 func (s *loginStore) ensureSchema() error {
@@ -270,6 +296,9 @@ func (s *loginStore) checkpointWAL() error {
 func (s *loginStore) Close() error {
 	if s == nil || s.db == nil {
 		return nil
+	}
+	if s.ro != nil {
+		_ = s.ro.Close()
 	}
 	return s.db.Close()
 }

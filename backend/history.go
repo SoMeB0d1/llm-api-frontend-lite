@@ -41,6 +41,11 @@ func handleHistoryTopic(store *loginStore) http.Handler {
 			return
 		}
 
+		db := store.db
+		if store.ro != nil {
+			db = store.ro
+		}
+
 		var payload historyTopicRequest
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
@@ -49,7 +54,7 @@ func handleHistoryTopic(store *loginStore) http.Handler {
 			return
 		}
 
-		rows, err := store.db.Query(
+		rows, err := db.Query(
 			`SELECT message_id, time, roll, context
 			FROM message
 			WHERE conversation_id = ?
@@ -103,6 +108,11 @@ func handleHistory(store *loginStore) http.Handler {
 			return
 		}
 
+		db := store.db
+		if store.ro != nil {
+			db = store.ro
+		}
+
 		var payload historyRequest
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
@@ -119,7 +129,7 @@ func handleHistory(store *loginStore) http.Handler {
 		}
 
 		var exists int
-		err := store.db.QueryRow(
+		err := db.QueryRow(
 			"SELECT 1 FROM user WHERE user_id = ? LIMIT 1",
 			payload.UserID,
 		).Scan(&exists)
@@ -131,7 +141,7 @@ func handleHistory(store *loginStore) http.Handler {
 			return
 		}
 
-		rows, err := store.db.Query(
+		rows, err := db.Query(
 			`SELECT last_edit_time, title, conversation_id
 			FROM conversation
 			WHERE user_id = ?

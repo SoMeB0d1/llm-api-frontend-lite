@@ -239,9 +239,20 @@ function handleServerError() {
   showToast("出现问题，请联系管理员");
 }
 
-async function refreshHistoryAfterNewChat() {
+function getConversationTitle(conversationId) {
+  const target = Number(conversationId);
+  if (!Number.isFinite(target)) {
+    return "";
+  }
+  const entry = state.history.find(
+    (item) => Number(item?.conversation_id) === target
+  );
+  return entry?.title || "";
+}
+
+async function refreshHistoryAfterChat() {
   await loadHistory();
-  if (state.conversationId >= 0) {
+  if (state.conversationId >= 0 && getConversationTitle(state.conversationId) === "new_conversation") {
     try {
       await apiFetch("/title", {
         method: "POST",
@@ -255,8 +266,8 @@ async function refreshHistoryAfterNewChat() {
         console.error("Title update failed:", error);
       }
     }
+    await loadHistory();
   }
-  await loadHistory();
 }
 
 async function copyToClipboard(text) {
@@ -774,6 +785,7 @@ async function validateToken() {
 }
 
 async function loadHistory() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
   renderHistory();
   const { controller, timeout } = getTimeoutSignal(20000);
   const headers = { "Content-Type": "application/json" };
@@ -965,6 +977,7 @@ async function sendMessage(prompt, placeholder) {
   const streamResult = await fetchStream(prompt, placeholder);
   if (streamResult !== null) {
     setStatus("Ready");
+    await refreshHistoryAfterChat();
     return streamResult;
   }
   setStatus("Thinking...");
@@ -981,6 +994,7 @@ async function sendMessage(prompt, placeholder) {
     state.conversationId = response.conversationId;
   }
   setStatus("Ready");
+  await refreshHistoryAfterChat();
   return response.answer || "(no response)";
 }
 
@@ -1136,7 +1150,6 @@ function initEvents() {
       showToast("输入内容不能为空");
       return;
     }
-    const wasNewChat = state.conversationId === -1;
     if (state.isNewChat) {
       setNewChatState(false);
     }
@@ -1172,9 +1185,6 @@ function initEvents() {
             ],
           });
         }
-      }
-      if (wasNewChat) {
-        await refreshHistoryAfterNewChat();
       }
     } catch (error) {
       placeholder.textContent = "Request failed.";
