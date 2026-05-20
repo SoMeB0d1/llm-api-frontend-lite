@@ -50,23 +50,79 @@ type upstreamResponse struct {
 
 const defaultConversationPrompt = "You are an assistant. "
 
-func translate(input string) string {
-	// TODO: add history
-	return input
-}
+// buildUpstreamRequest 根据 ChatRequest 和数据库历史记录构建上游请求体。
+// conversationId == -1 表示新对话，不查询数据库。
+// 数据库查询失败时返回 error。
+func buildUpstreamRequest(payload ChatRequest, store *loginStore, stream bool) (upstreamRequest, error) {
+	messages := make([]upstreamMessage, 0)
 
-func buildUpstreamRequest(payload ChatRequest, stream bool) upstreamRequest {
-	translated := translate(payload.Message)
-	systemNote := fmt.Sprintf("user_id=%d; conversation_id=%d; requested_model=%s", payload.UserID, payload.ConversationID, payload.Model)
-	return upstreamRequest{
-		Model: "deepseek-v4-flash",
-		Messages: []upstreamMessage{
-			{Role: "system", Content: systemNote},
-			{Role: "user", Content: translated},
-		},
-		User:   strconv.FormatInt(payload.UserID, 10),
-		Stream: stream,
+	if payload.ConversationID == -1 {
+		// 新对话：不使用数据库，仅将 prompt（若有）作为 system 和当前 message 作为 user
+		if strings.TrimSpace(payload.Prompt) != "" {
+			messages = append(messages, upstreamMessage{Role: "system", Content: payload.Prompt})
+		}
+		messages = append(messages, upstreamMessage{Role: "user", Content: payload.Message})
+		return upstreamRequest{
+			Model:    payload.Model,
+			Messages: messages,
+			User:     strconv.FormatInt(payload.UserID, 10),
+			Stream:   stream,
+		}, nil
 	}
+
+	// 已有对话：查询数据库获取 prompt 和历史消息
+	if store == nil || store.db == nil {
+		return upstreamRequest{}, errors.New("login store not initialized")
+	}
+
+	// 查询 conversation 的 prompt
+	var prompt string
+	err := store.db.QueryRow(
+		`SELECT prompt FROM conversation WHERE conversation_id = ?`,
+		payload.ConversationID,
+	).Scan(&prompt)
+	if err != nil {
+		return upstreamRequest{}, fmt.Errorf("query conversation failed: %w", err)
+	}
+
+	// prompt 作为 system 在最开头
+	if strings.TrimSpace(prompt) != "" {
+		messages = append(messages, upstreamMessage{Role: "system", Content: prompt})
+	}
+
+	// 查询历史 message，按时间顺序
+	rows, err := store.db.Query(
+		`SELECT roll, context FROM message
+		 WHERE conversation_id = ?
+		 ORDER BY time ASC, message_id ASC`,
+		payload.ConversationID,
+	)
+	if err != nil {
+		return upstreamRequest{}, fmt.Errorf("query messages failed: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var roll, context string
+		if scanErr := rows.Scan(&roll, &context); scanErr != nil {
+			return upstreamRequest{}, fmt.Errorf("scan message failed: %w", scanErr)
+		}
+		role := roll
+		if role == "llm" {
+			role = "assistant"
+		}
+		messages = append(messages, upstreamMessage{Role: role, Content: context})
+	}
+	if err := rows.Err(); err != nil {
+		return upstreamRequest{}, fmt.Errorf("iterate messages failed: %w", err)
+	}
+
+	return upstreamRequest{
+		Model:    payload.Model,
+		Messages: messages,
+		User:     strconv.FormatInt(payload.UserID, 10),
+		Stream:   stream,
+	}, nil
 }
 
 func doUpstream(ctx context.Context, baseURL, apiKey string, body []byte) (*http.Response, error) {
@@ -82,8 +138,11 @@ func doUpstream(ctx context.Context, baseURL, apiKey string, body []byte) (*http
 	return client.Do(request)
 }
 
-func callUpstream(ctx context.Context, baseURL, apiKey string, payload ChatRequest) (string, error) {
-	reqBody := buildUpstreamRequest(payload, false)
+func callUpstream(ctx context.Context, baseURL, apiKey string, payload ChatRequest, store *loginStore) (string, error) {
+	reqBody, err := buildUpstreamRequest(payload, store, false)
+	if err != nil {
+		return "", err
+	}
 	data, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", err
@@ -116,8 +175,11 @@ func callUpstream(ctx context.Context, baseURL, apiKey string, payload ChatReque
 // streamUpstream attempts SSE streaming from upstream.
 // Returns (streamed=true, err) — if streamed, headers were already written.
 // Returns (streamed=false, err) if caller should fall back to non-streaming.
-func streamUpstream(ctx context.Context, baseURL, apiKey string, payload ChatRequest, w http.ResponseWriter) (bool, string, error) {
-	reqBody := buildUpstreamRequest(payload, true)
+func streamUpstream(ctx context.Context, baseURL, apiKey string, payload ChatRequest, store *loginStore, w http.ResponseWriter) (bool, string, error) {
+	reqBody, err := buildUpstreamRequest(payload, store, true)
+	if err != nil {
+		return false, "", err
+	}
 	data, err := json.Marshal(reqBody)
 	if err != nil {
 		return false, "", err
@@ -607,7 +669,7 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 		}
 
 		// 1) 尝试流式输出（或自动回退并已写入 JSON）
-		streamed, streamAnswer, streamErr := streamUpstream(r.Context(), baseURL, apiKey, payload, w)
+		streamed, streamAnswer, streamErr := streamUpstream(r.Context(), baseURL, apiKey, payload, store, w)
 		if streamed {
 			if streamErr != nil && !errors.Is(streamErr, context.Canceled) {
 				logConsolef("stream error after headers: %v", streamErr)
@@ -636,9 +698,18 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 
 		// 2) streamUpstream 失败，回退到非流式
 		logConsolef("stream failed, fallback to non-stream: %v", streamErr)
-		answer, err := callUpstream(r.Context(), baseURL, apiKey, payload)
+		answer, err := callUpstream(r.Context(), baseURL, apiKey, payload, store)
 		if err != nil {
-			w.WriteHeader(http.StatusBadGateway)
+			status := http.StatusBadGateway
+			errMsg := strings.ToLower(err.Error())
+			if strings.Contains(errMsg, "query conversation failed") ||
+				strings.Contains(errMsg, "query messages failed") ||
+				strings.Contains(errMsg, "iterate messages failed") ||
+				strings.Contains(errMsg, "scan message failed") ||
+				strings.Contains(errMsg, "login store not initialized") {
+				status = http.StatusInternalServerError
+			}
+			w.WriteHeader(status)
 			_, _ = w.Write([]byte(fmt.Sprintf(`{"error":"upstream_error","message":"%s"}`, err.Error())))
 			return
 		}
