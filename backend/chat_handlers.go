@@ -445,17 +445,9 @@ func trimTitle(text string, limit int) string {
 	}
 	runes := []rune(trimmed)
 	if len(runes) <= limit {
-		return trimTitleSuffix(trimmed)
+		return trimmed
 	}
-	return trimTitleSuffix(string(runes[:limit]))
-}
-
-func trimTitleSuffix(text string) string {
-	text = strings.TrimSpace(text)
-	if strings.HasSuffix(text, "。") || strings.HasSuffix(text, ".") {
-		return strings.TrimSpace(text[:len(text)-len("。")])
-	}
-	return text
+	return string(runes[:limit])
 }
 
 func handleTitle(baseURL, apiKey, titleModel string, store *loginStore) http.Handler {

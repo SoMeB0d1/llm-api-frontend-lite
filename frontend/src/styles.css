@@ -253,6 +253,10 @@ body {
   text-align: left;
   width: 100%;
   transition: border 0.2s ease, transform 0.2s ease;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  height: 38px;
 }
 
 .history-item:hover {
