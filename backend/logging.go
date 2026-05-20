@@ -198,6 +198,13 @@ func logJSONMiddleware(next http.Handler) http.Handler {
 			requestBody, _ = io.ReadAll(r.Body)
 			r.Body = io.NopCloser(bytes.NewReader(requestBody))
 		}
+		if r.URL.Path == "/chat" {
+			logJSONEvent("chat_request", map[string]interface{}{
+				"method":       r.Method,
+				"path":         r.URL.Path,
+				"request_body": string(requestBody),
+			})
+		}
 
 		recorder := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)

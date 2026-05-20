@@ -239,6 +239,26 @@ function handleServerError() {
   showToast("出现问题，请联系管理员");
 }
 
+async function refreshHistoryAfterNewChat() {
+  await loadHistory();
+  if (state.conversationId >= 0) {
+    try {
+      await apiFetch("/title", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: state.userId,
+          conversationId: state.conversationId,
+        }),
+      });
+    } catch (error) {
+      if (error?.message !== "server_error") {
+        console.error("Title update failed:", error);
+      }
+    }
+  }
+  await loadHistory();
+}
+
 async function copyToClipboard(text) {
   if (!text) {
     return;
@@ -330,7 +350,7 @@ async function retryPrompt(wrapper) {
   const placeholder = renderMessage("assistant", "...");
   setMessagePrompt(placeholder, prompt);
   try {
-    const answer = await sendPrompt(prompt, placeholder);
+    const answer = await sendMessage(prompt, placeholder);
     if (placeholder.dataset.raw === answer) {
       if (window.renderMathInElement) {
         window.renderMathInElement(placeholder, {
@@ -880,6 +900,13 @@ async function fetchStream(prompt, placeholder) {
     }
     return null;
   }
+  const headerConversationId = response.headers.get("x-conversation-id");
+  if (headerConversationId) {
+    const parsed = Number(headerConversationId);
+    if (Number.isFinite(parsed)) {
+      state.conversationId = parsed;
+    }
+  }
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.startsWith("text/event-stream")) {
     // 上游返回非 SSE（JSON），直接解析，避免二次请求
@@ -933,7 +960,7 @@ async function fetchStream(prompt, placeholder) {
   return fullText || null;
 }
 
-async function sendPrompt(prompt, placeholder) {
+async function sendMessage(prompt, placeholder) {
   setStatus("Thinking...");
   const streamResult = await fetchStream(prompt, placeholder);
   if (streamResult !== null) {
@@ -1109,6 +1136,7 @@ function initEvents() {
       showToast("输入内容不能为空");
       return;
     }
+    const wasNewChat = state.conversationId === -1;
     if (state.isNewChat) {
       setNewChatState(false);
     }
@@ -1118,7 +1146,7 @@ function initEvents() {
     const placeholder = renderMessage("assistant", "...");
     setMessagePrompt(placeholder, prompt);
     try {
-      const answer = await sendPrompt(prompt, placeholder);
+      const answer = await sendMessage(prompt, placeholder);
       if (placeholder.dataset.raw === answer) {
         // 流式已完成渲染，仅执行数学渲染
         if (window.renderMathInElement) {
@@ -1144,6 +1172,9 @@ function initEvents() {
             ],
           });
         }
+      }
+      if (wasNewChat) {
+        await refreshHistoryAfterNewChat();
       }
     } catch (error) {
       placeholder.textContent = "Request failed.";

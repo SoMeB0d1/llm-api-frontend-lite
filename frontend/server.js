@@ -107,14 +107,19 @@ async function handleChat(req, res) {
     });
 
     const upstreamContentType = upstream.headers.get("content-type") || "application/json";
+    const upstreamConversationId = upstream.headers.get("x-conversation-id");
 
     // SSE 流式透传
     if (upstreamContentType.startsWith("text/event-stream")) {
-      res.writeHead(upstream.status, {
+      const headers = {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
-      });
+      };
+      if (upstreamConversationId) {
+        headers["X-Conversation-Id"] = upstreamConversationId;
+      }
+      res.writeHead(upstream.status, headers);
       const reader = upstream.body;
       reader.on("data", (chunk) => {
         res.write(chunk);
@@ -129,8 +134,40 @@ async function handleChat(req, res) {
     }
 
     const text = await upstream.text();
-    res.writeHead(upstream.status, {
+    const headers = {
       "Content-Type": upstreamContentType,
+    };
+    if (upstreamConversationId) {
+      headers["X-Conversation-Id"] = upstreamConversationId;
+    }
+    res.writeHead(upstream.status, headers);
+    res.end(text);
+  } catch (error) {
+    send(
+      res,
+      502,
+      JSON.stringify({ error: "proxy_error", message: error.message }),
+      "application/json"
+    );
+  }
+}
+
+async function handleTitle(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    if (!body) {
+      send(res, 400, "{\"error\":\"empty_body\"}", "application/json");
+      return;
+    }
+
+    const upstream = await fetch(`${backendUrl}/title`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const text = await upstream.text();
+    res.writeHead(upstream.status, {
+      "Content-Type": upstream.headers.get("content-type") || "application/json",
     });
     res.end(text);
   } catch (error) {
@@ -265,6 +302,10 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.url === "/history/topic" && req.method === "POST") {
     await handleHistoryTopic(req, res);
+    return;
+  }
+  if (req.url === "/title" && req.method === "POST") {
+    await handleTitle(req, res);
     return;
   }
   if (req.url && (req.url.startsWith("/v1") || req.url.startsWith("/auth"))) {

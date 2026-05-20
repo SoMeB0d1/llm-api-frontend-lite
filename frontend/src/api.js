@@ -8,7 +8,7 @@ async function ensureToken() {
   return false;
 }
 
-async function sendPrompt(prompt) {
+async function sendMessage(prompt) {
   const response = await fetch("/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

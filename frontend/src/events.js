@@ -17,13 +17,13 @@ function attachEvents() {
   });
 
   // 发送按钮
-  elements.sendBtn?.addEventListener("click", sendMessage);
+  elements.sendBtn?.addEventListener("click", sendMessageUI);
 
   // 输入框回车发送
   elements.chatInput?.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      sendMessage();
+      sendMessageUI();
     }
   });
 
@@ -102,7 +102,7 @@ function attachEvents() {
   });
 }
 
-async function sendMessage() {
+async function sendMessageUI() {
   const prompt = elements.chatInput?.value.trim();
   if (!prompt) {
     return;
@@ -124,7 +124,7 @@ async function sendMessage() {
   setMessagePrompt(placeholder, prompt);
 
   try {
-    const answer = await sendPrompt(prompt);
+    const answer = await sendMessage(prompt);
     if (state.isNewChat) {
       setNewChatState(false);
     }

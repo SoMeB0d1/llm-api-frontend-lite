@@ -42,12 +42,14 @@
 - 调用位置：主聊天页（[frontend/src/app.js](frontend/src/app.js)）
 - 请求体：
 ```json
-{"userId":"<string>","conversationId":123,"model":"<string>","message":"<string>"}
+{"userId":"<string>","conversationId":-1,"model":"<string>","message":"<string>"}
 ```
 - 期望响应字段：
 ```json
 {"answer":"<string>","conversationId":123}
 ```
+- 说明：
+  - 新对话时 `conversationId=-1`，后端会分配新的 `conversationId`
 
 ### POST /history
 - 用途：获取历史会话列表
@@ -77,6 +79,22 @@
 - 错误处理：
   - 后端数据库查询失败时返回 500 `{ "error": "db_error" }`
   - 前端收到 500 后弹窗提示“出现问题，请联系管理员”
+
+### POST /title
+- 用途：生成并更新会话标题
+- 后端实现情况：已实现（路由见 [backend/main.go](backend/main.go)，处理见 [backend/chat_handlers.go](backend/chat_handlers.go)）
+- 调用位置：主聊天页（[frontend/src/app.js](frontend/src/app.js)）新对话消息完成后
+- 请求体：
+```json
+{"userId":"<string>","conversationId":123}
+```
+- 期望响应字段：
+```json
+{"title":"<string>","conversationId":123}
+```
+- 说明：
+  - 标题生成提示语：将下面这段文字概括为32个字符并保持语言相同
+  - 模型来自后端环境变量 `TITLE_MODEL`
 
 ## 模型列表
 

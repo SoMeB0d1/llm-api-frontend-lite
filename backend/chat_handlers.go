@@ -47,6 +47,8 @@ type upstreamResponse struct {
 	Choices []upstreamChoice `json:"choices"`
 }
 
+const defaultConversationPrompt = "You are an assistant. "
+
 func translate(input string) string {
 	// TODO: add history
 	return input
@@ -151,6 +153,7 @@ func streamUpstream(ctx context.Context, baseURL, apiKey string, payload ChatReq
 		return false, "", errors.New("response writer does not support flushing")
 	}
 
+	w.Header().Set("X-Conversation-Id", strconv.FormatInt(payload.ConversationID, 10))
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -385,6 +388,166 @@ func isConstraintError(err error) bool {
 	return strings.Contains(msg, "constraint") || strings.Contains(msg, "unique")
 }
 
+type titleRequest struct {
+	UserID         string `json:"userId"`
+	ConversationID int64  `json:"conversationId"`
+}
+
+type titleResponse struct {
+	Title          string `json:"title"`
+	ConversationID int64  `json:"conversationId"`
+}
+
+func callTitleUpstream(ctx context.Context, baseURL, apiKey, model, text string) (string, error) {
+	if strings.TrimSpace(model) == "" {
+		return "", errors.New("title_model_missing")
+	}
+	requestBody := upstreamRequest{
+		Model: model,
+		Messages: []upstreamMessage{
+			{Role: "system", Content: "你是摘要生成器。请用原文语言输出不超过32个字符的摘要，只输出摘要文本，不要解释或提问。若文本过短，直接复述并截断到32字符以内。"},
+			{Role: "user", Content: text},
+		},
+	}
+	// fmt.Printf("First message: %s\n", text)
+	data, err := json.Marshal(requestBody)
+	// fmt.Printf("Request body: %s\n", string(data))
+	if err != nil {
+		return "", err
+	}
+	resp, err := doUpstream(ctx, baseURL, apiKey, data)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("upstream status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var parsed upstreamResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return "", err
+	}
+	if len(parsed.Choices) == 0 {
+		return "", errors.New("upstream returned no choices")
+	}
+	return parsed.Choices[0].Message.Content, nil
+}
+
+func trimTitle(text string, limit int) string {
+	trimmed := strings.TrimSpace(text)
+	if limit <= 0 {
+		return ""
+	}
+	runes := []rune(trimmed)
+	if len(runes) <= limit {
+		return trimTitleSuffix(trimmed)
+	}
+	return trimTitleSuffix(string(runes[:limit]))
+}
+
+func trimTitleSuffix(text string) string {
+	text = strings.TrimSpace(text)
+	if strings.HasSuffix(text, "。") || strings.HasSuffix(text, ".") {
+		return strings.TrimSpace(text[:len(text)-len("。")])
+	}
+	return text
+}
+
+func handleTitle(baseURL, apiKey, titleModel string, store *loginStore) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if store == nil || store.db == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+				"error": "login_store_unavailable",
+			})
+			return
+		}
+
+		var payload titleRequest
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "invalid_json",
+			})
+			return
+		}
+		payload.UserID = strings.TrimSpace(payload.UserID)
+		if payload.UserID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "invalid_user_id",
+			})
+			return
+		}
+		userID, err := strconv.ParseInt(payload.UserID, 10, 64)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "invalid_user_id",
+			})
+			return
+		}
+
+		var firstMessage string
+		err = store.db.QueryRow(
+			`SELECT m.context
+      FROM conversation c
+      JOIN message m ON m.conversation_id = c.conversation_id
+      WHERE c.conversation_id = ? AND c.user_id = ? AND m.roll = 'user'
+			ORDER BY m.time ASC, m.message_id ASC
+      LIMIT 1`,
+			payload.ConversationID,
+			userID,
+		).Scan(&firstMessage)
+		if err != nil {
+			logConsolef("title lookup failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "db_error",
+			})
+			return
+		}
+		runes := []rune(firstMessage)
+		preview := firstMessage
+		if len(runes) > 64 {
+			preview = string(runes[:64])
+		}
+		logJSONEvent("title_first_message", map[string]interface{}{
+			"conversation_id": payload.ConversationID,
+			"user_id":         userID,
+			"length":          len(runes),
+			"preview":         preview,
+		})
+
+		answer, err := callTitleUpstream(r.Context(), baseURL, apiKey, titleModel, firstMessage)
+		if err != nil {
+			logConsolef("title upstream failed: %v", err)
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"error":"upstream_error","message":"%s"}`, err.Error())))
+			return
+		}
+		title := trimTitle(answer, 32)
+		if _, err := store.db.Exec(
+			`UPDATE conversation SET title = ? WHERE conversation_id = ? AND user_id = ?`,
+			title,
+			payload.ConversationID,
+			userID,
+		); err != nil {
+			logConsolef("title update failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "db_error",
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, titleResponse{Title: title, ConversationID: payload.ConversationID})
+	})
+}
+
 func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -419,7 +582,7 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 				})
 				return
 			}
-			conversationID, err := store.createConversation(userID, payload.Model, payload.Message)
+			conversationID, err := store.createConversation(userID, payload.Model, defaultConversationPrompt)
 			if err != nil {
 				logConsolef("create conversation failed: %v", err)
 				writeJSON(w, http.StatusInternalServerError, map[string]string{

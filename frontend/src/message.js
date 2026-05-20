@@ -120,7 +120,7 @@ async function retryPrompt(wrapper) {
   const placeholder = renderMessage("assistant", "...");
   setMessagePrompt(placeholder, prompt);
   try {
-    const answer = await sendPrompt(prompt);
+    const answer = await sendMessage(prompt);
     placeholder.innerHTML = renderMarkdown(answer);
     placeholder.dataset.raw = answer;
     const placeholderWrapper = placeholder.closest(".message");

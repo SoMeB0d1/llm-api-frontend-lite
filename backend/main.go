@@ -60,6 +60,7 @@ func main() {
 
 	targetRaw := mustGetEnv("OPENAI_BASE_URL")
 	apiKey := mustGetEnv("OPENAI_API_KEY")
+	titleModel := os.Getenv("TITLE_MODEL")
 	port := os.Getenv("BACKEND_PORT")
 	if port == "" {
 		port = "8787"
@@ -95,6 +96,7 @@ func main() {
 	})
 
 	mux.Handle("/chat", withCORS(handleChat(upstreamBase, apiKey, store)))
+	mux.Handle("/title", withCORS(handleTitle(upstreamBase, apiKey, titleModel, store)))
 	mux.Handle("/history", withCORS(handleHistory(store)))
 	mux.Handle("/history/topic", withCORS(handleHistoryTopic(store)))
 	mux.Handle("/auth/login", withCORS(handleAuthLogin(store)))
@@ -135,6 +137,7 @@ func withCORS(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Expose-Headers", "X-Conversation-Id")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
