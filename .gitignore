@@ -12,3 +12,5 @@
 /backend/database.db
 /backend/database.db-shm
 /backend/database.db-wal
+
+/backend/llm-api-frontend-lite.exe

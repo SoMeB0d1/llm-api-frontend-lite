@@ -16,7 +16,7 @@
 ```
 - 期望响应字段（登录页使用）：
 ```json
-{"new_token":"<string>","user_ID":"<string>","user_exist":true,"psw_right":true}
+{"new_token":"<string>","user_ID":<number>,"user_exist":true,"psw_right":true}
 ```
 
 ### POST /auth/token
@@ -31,7 +31,7 @@
 ```
 - 期望响应字段：
 ```json
-{"token_valid":true,"new_token":"<string>","user_ID":"<string>","user_name":"<string>"}
+{"token_valid":true,"new_token":"<string>","user_ID":<number>,"user_name":"<string>"}
 ```
 
 ## 聊天与历史
@@ -42,7 +42,7 @@
 - 调用位置：主聊天页（[frontend/src/app.js](frontend/src/app.js)）
 - 请求体：
 ```json
-{"userId":"<string>","conversationId":-1,"model":"<string>","message":"<string>"}
+{"userId":<number>,"conversationId":-1,"model":"<string>","message":"<string>"}
 ```
 - 期望响应字段：
 ```json
@@ -57,7 +57,7 @@
 - 调用位置：主聊天页（[frontend/src/app.js](frontend/src/app.js)）
 - 请求体：
 ```json
-{"user_id":"<string>"}
+{"user_id":<number>}
 ```
 - 期望响应字段（直接返回数组）：
 ```json
@@ -86,7 +86,7 @@
 - 调用位置：主聊天页（[frontend/src/app.js](frontend/src/app.js)）新对话消息完成后
 - 请求体：
 ```json
-{"userId":"<string>","conversationId":123}
+{"userId":<number>,"conversationId":123}
 ```
 - 期望响应字段：
 ```json

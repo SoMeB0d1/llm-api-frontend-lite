@@ -36,7 +36,7 @@ async function checkToken() {
       if (data.new_token) {
         localStorage.setItem(STORAGE_KEYS.token, data.new_token);
       }
-      if (data.user_ID) {
+      if (data.user_ID != null) {
         localStorage.setItem(STORAGE_KEYS.userId, data.user_ID);
       }
       if (data.user_name) {

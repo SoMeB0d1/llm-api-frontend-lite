@@ -79,7 +79,7 @@ async function login(username, password) {
 
 function saveAuth(data, userId, userName) {
   localStorage.setItem(STORAGE_KEYS.token, data.new_token || "");
-  localStorage.setItem(STORAGE_KEYS.userId, userId || "");
+  localStorage.setItem(STORAGE_KEYS.userId, userId != null ? Number(userId) : "");
   localStorage.setItem(STORAGE_KEYS.userName, userName || "");
 }
 
@@ -118,7 +118,7 @@ function init() {
         showToast("密码错误");
         return;
       }
-      saveAuth(data, data.user_ID || "", username);
+      saveAuth(data, data.user_ID != null ? data.user_ID : "", username);
       window.location.href = "/index.html";
     } catch (error) {
       showToast(error.message || "登录失败");

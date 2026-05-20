@@ -19,7 +19,7 @@ const STORAGE_KEYS = {
 const state = {
   baseUrl: "",
   token: "",
-  userId: "guest",
+  userId: 0,
   userName: "guest",
   conversationId: -1,
   model: "deepseek-v4-flash",
@@ -49,8 +49,9 @@ function newConversationId() {
 function loadStoredState() {
   const legacyUser = localStorage.getItem("llm.user");
   state.token = localStorage.getItem(STORAGE_KEYS.token) || "";
-  state.userId =
-    localStorage.getItem(STORAGE_KEYS.userId) || legacyUser || "guest";
+  const storedUserId = localStorage.getItem(STORAGE_KEYS.userId) || legacyUser;
+  const numericUserId = Number(storedUserId);
+  state.userId = Number.isFinite(numericUserId) ? numericUserId : 0;
   state.userName =
     localStorage.getItem(STORAGE_KEYS.userName) || legacyUser || "guest";
   state.baseUrl =
@@ -75,7 +76,8 @@ function setNewChatState(isNew) {
 }
 
 function setUserId(id, name) {
-  state.userId = id || state.userId || "guest";
+  const numericId = Number(id);
+  state.userId = Number.isFinite(numericId) ? numericId : (state.userId || 0);
   state.userName = name || state.userName || "guest";
   elements.userId.textContent = state.userName;
   saveAuth();

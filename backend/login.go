@@ -32,7 +32,7 @@ type authLoginRequest struct {
 
 type authTokenResponse struct {
 	TokenValid bool   `json:"token_valid"`
-	UserID     string `json:"user_ID"`
+	UserID     int64  `json:"user_ID"`
 	UserName   string `json:"user_name"`
 	NewToken   string `json:"new_token"`
 }
@@ -40,7 +40,7 @@ type authTokenResponse struct {
 type authLoginResponse struct {
 	UserExist bool   `json:"user_exist"`
 	PswRight  bool   `json:"psw_right"`
-	UserID    string `json:"user_ID"`
+	UserID    int64  `json:"user_ID"`
 	NewToken  string `json:"new_token"`
 }
 
@@ -329,7 +329,7 @@ func handleAuthToken(store *loginStore) http.Handler {
 			return
 		}
 
-		var userID string
+		var userID int64
 		var userName string
 		var userToken string
 		var tokenTime string
@@ -402,7 +402,7 @@ func handleAuthLogin(store *loginStore) http.Handler {
 			return
 		}
 
-		var userID string
+		var userID int64
 		var userPassword string
 		err := store.db.QueryRow(
 			"SELECT user_id, user_password FROM user WHERE user_name = ? LIMIT 1",

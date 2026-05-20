@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"strings"
 )
 
 type historyRequest struct {
-	UserID string `json:"user_id"`
+	UserID int64 `json:"user_id"`
 }
 
 type historyItem struct {
@@ -120,8 +119,7 @@ func handleHistory(store *loginStore) http.Handler {
 			})
 			return
 		}
-		payload.UserID = strings.TrimSpace(payload.UserID)
-		if payload.UserID == "" {
+		if payload.UserID < 0 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
 				"error": "invalid_user_id",
 			})

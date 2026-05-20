@@ -15,7 +15,7 @@ import (
 )
 
 type ChatRequest struct {
-	UserID         string `json:"userId"`
+	UserID         int64  `json:"userId"`
 	ConversationID int64  `json:"conversationId"`
 	Model          string `json:"model"`
 	Prompt         string `json:"prompt,omitempty"`
@@ -57,14 +57,14 @@ func translate(input string) string {
 
 func buildUpstreamRequest(payload ChatRequest, stream bool) upstreamRequest {
 	translated := translate(payload.Message)
-	systemNote := fmt.Sprintf("user_id=%s; conversation_id=%d; requested_model=%s", payload.UserID, payload.ConversationID, payload.Model)
+	systemNote := fmt.Sprintf("user_id=%d; conversation_id=%d; requested_model=%s", payload.UserID, payload.ConversationID, payload.Model)
 	return upstreamRequest{
 		Model: "deepseek-v4-flash",
 		Messages: []upstreamMessage{
 			{Role: "system", Content: systemNote},
 			{Role: "user", Content: translated},
 		},
-		User:   payload.UserID,
+		User:   strconv.FormatInt(payload.UserID, 10),
 		Stream: stream,
 	}
 }
@@ -394,8 +394,8 @@ func isConstraintError(err error) bool {
 }
 
 type titleRequest struct {
-	UserID         string `json:"userId"`
-	ConversationID int64  `json:"conversationId"`
+	UserID         int64 `json:"userId"`
+	ConversationID int64 `json:"conversationId"`
 }
 
 type titleResponse struct {
@@ -475,15 +475,7 @@ func handleTitle(baseURL, apiKey, titleModel string, store *loginStore) http.Han
 			})
 			return
 		}
-		payload.UserID = strings.TrimSpace(payload.UserID)
-		if payload.UserID == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "invalid_user_id",
-			})
-			return
-		}
-		userID, err := strconv.ParseInt(payload.UserID, 10, 64)
-		if err != nil {
+		if payload.UserID < 0 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
 				"error": "invalid_user_id",
 			})
@@ -491,7 +483,7 @@ func handleTitle(baseURL, apiKey, titleModel string, store *loginStore) http.Han
 		}
 
 		var firstMessage string
-		err = store.db.QueryRow(
+		err := store.db.QueryRow(
 			`SELECT m.context
       FROM conversation c
       JOIN message m ON m.conversation_id = c.conversation_id
@@ -499,7 +491,7 @@ func handleTitle(baseURL, apiKey, titleModel string, store *loginStore) http.Han
 			ORDER BY m.time ASC, m.message_id ASC
       LIMIT 1`,
 			payload.ConversationID,
-			userID,
+			payload.UserID,
 		).Scan(&firstMessage)
 		if err != nil {
 			logConsolef("title lookup failed: %v", err)
@@ -515,7 +507,7 @@ func handleTitle(baseURL, apiKey, titleModel string, store *loginStore) http.Han
 		}
 		logJSONEvent("title_first_message", map[string]interface{}{
 			"conversation_id": payload.ConversationID,
-			"user_id":         userID,
+			"user_id":         payload.UserID,
 			"length":          len(runes),
 			"preview":         preview,
 		})
@@ -532,7 +524,7 @@ func handleTitle(baseURL, apiKey, titleModel string, store *loginStore) http.Han
 			`UPDATE conversation SET title = ? WHERE conversation_id = ? AND user_id = ?`,
 			title,
 			payload.ConversationID,
-			userID,
+			payload.UserID,
 		); err != nil {
 			logConsolef("title update failed: %v", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{
@@ -573,8 +565,7 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 		}
 
 		if payload.ConversationID == -1 {
-			userID, err := strconv.ParseInt(strings.TrimSpace(payload.UserID), 10, 64)
-			if err != nil {
+			if payload.UserID < 0 {
 				writeJSON(w, http.StatusBadRequest, map[string]string{
 					"error": "invalid_user_id",
 				})
@@ -584,7 +575,7 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 			if payload.Prompt != "" {
 				promptToStore = payload.Prompt
 			}
-			conversationID, err := store.createConversation(userID, payload.Model, promptToStore)
+			conversationID, err := store.createConversation(payload.UserID, payload.Model, promptToStore)
 			if err != nil {
 				logConsolef("create conversation failed: %v", err)
 				writeJSON(w, http.StatusInternalServerError, map[string]string{
