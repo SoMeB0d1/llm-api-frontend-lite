@@ -14,3 +14,4 @@
 /backend/database.db-wal
 
 /backend/llm-api-frontend-lite.exe
+/backend/llm-api-backend.exe
