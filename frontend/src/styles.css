@@ -699,6 +699,11 @@ body {
   margin-top: 8px;
 }
 
+.prompt-save-wrap {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .button-row {
   display: grid;
   gap: 10px;

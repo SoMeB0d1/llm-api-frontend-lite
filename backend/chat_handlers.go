@@ -18,6 +18,7 @@ type ChatRequest struct {
 	UserID         string `json:"userId"`
 	ConversationID int64  `json:"conversationId"`
 	Model          string `json:"model"`
+	Prompt         string `json:"prompt,omitempty"`
 	Message        string `json:"message"`
 }
 
@@ -225,6 +226,10 @@ func streamUpstream(ctx context.Context, baseURL, apiKey string, payload ChatReq
 func (s *loginStore) createConversation(userID int64, model, prompt string) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, errors.New("login store not initialized")
+	}
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		prompt = defaultConversationPrompt
 	}
 	var conversationID int64
 	err := retryLocked(6, 400*time.Millisecond, func() error {
@@ -560,6 +565,7 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 			return
 		}
 		payload.Message = strings.TrimSpace(payload.Message)
+		payload.Prompt = strings.TrimSpace(payload.Prompt)
 		if payload.Message == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(`{"error":"empty_message"}`))
@@ -574,7 +580,11 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 				})
 				return
 			}
-			conversationID, err := store.createConversation(userID, payload.Model, defaultConversationPrompt)
+			promptToStore := defaultConversationPrompt
+			if payload.Prompt != "" {
+				promptToStore = payload.Prompt
+			}
+			conversationID, err := store.createConversation(userID, payload.Model, promptToStore)
 			if err != nil {
 				logConsolef("create conversation failed: %v", err)
 				writeJSON(w, http.StatusInternalServerError, map[string]string{

@@ -5,6 +5,7 @@ const state = {
   userName: "guest",
   conversationId: -1,
   model: "deepseek-v4-flash",
+  systemPromptApplied: "You are an assistant. ",
   isNewChat: true,
   history: [],
 };
@@ -44,6 +45,7 @@ const elements = {
   settingsPanelModel: document.getElementById("settingsPanelModel"),
   settingsPanelRoot: document.getElementById("settingsPanelRoot"),
   systemPromptInput: document.getElementById("systemPromptInput"),
+  savePromptBtn: document.getElementById("savePromptBtn"),
   logoutBtn: document.getElementById("logoutBtn"),
   settingsForm: document.getElementById("settingsForm"),
   apiBaseUrl: document.getElementById("apiBaseUrl"),
@@ -451,10 +453,33 @@ function syncSystemPromptInputState() {
   if (!elements.systemPromptInput) {
     return;
   }
-  if (!elements.systemPromptInput.value.trim()) {
-    elements.systemPromptInput.value = DEFAULT_SYSTEM_PROMPT;
-  }
+  elements.systemPromptInput.value = state.systemPromptApplied || DEFAULT_SYSTEM_PROMPT;
   elements.systemPromptInput.disabled = !state.isNewChat;
+  if (elements.savePromptBtn) {
+    elements.savePromptBtn.disabled = !state.isNewChat;
+  }
+}
+
+function getSystemPromptForNewConversation() {
+  return state.systemPromptApplied || DEFAULT_SYSTEM_PROMPT;
+}
+
+function saveSystemPrompt() {
+  const previousPrompt = state.systemPromptApplied || DEFAULT_SYSTEM_PROMPT;
+  const nextPrompt = elements.systemPromptInput?.value?.trim() || "";
+  if (!nextPrompt) {
+    showToast("Prompt 不能为空");
+    if (elements.systemPromptInput) {
+      elements.systemPromptInput.value = previousPrompt;
+    }
+    return false;
+  }
+  state.systemPromptApplied = nextPrompt;
+  if (elements.systemPromptInput) {
+    elements.systemPromptInput.value = nextPrompt;
+  }
+  showToast("Prompt 已保存", "success");
+  return true;
 }
 
 function isRootUser() {
@@ -948,15 +973,19 @@ async function fetchStream(prompt, placeholder) {
   }
   let response;
   try {
+    const requestBody = {
+      userId: state.userId,
+      conversationId: state.conversationId,
+      model: state.model,
+      message: prompt,
+    };
+    if (state.conversationId === -1) {
+      requestBody.prompt = getSystemPromptForNewConversation();
+    }
     response = await fetch(`${state.baseUrl}/chat`, {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        userId: state.userId,
-        conversationId: state.conversationId,
-        model: state.model,
-        message: prompt,
-      }),
+      body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
   } catch (error) {
@@ -1039,14 +1068,18 @@ async function sendMessage(prompt, placeholder) {
     return streamResult;
   }
   setStatus("Thinking...");
+  const requestBody = {
+    userId: state.userId,
+    conversationId: state.conversationId,
+    model: state.model,
+    message: prompt,
+  };
+  if (state.conversationId === -1) {
+    requestBody.prompt = getSystemPromptForNewConversation();
+  }
   const response = await apiFetch("/chat", {
     method: "POST",
-    body: JSON.stringify({
-      userId: state.userId,
-      conversationId: state.conversationId,
-      model: state.model,
-      message: prompt,
-    }),
+    body: JSON.stringify(requestBody),
   });
   if (typeof response.conversationId === "number") {
     state.conversationId = response.conversationId;
@@ -1192,6 +1225,12 @@ function initEvents() {
       localStorage.removeItem(STORAGE_KEYS.userId);
       localStorage.removeItem(STORAGE_KEYS.userName);
       window.location.href = "/token_check/token_check.html";
+    });
+  }
+
+  if (elements.savePromptBtn) {
+    elements.savePromptBtn.addEventListener("click", () => {
+      saveSystemPrompt();
     });
   }
 
