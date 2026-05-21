@@ -10,13 +10,15 @@ LLM API 的轻量化前后端一体方案 —— 极简部署，开箱即用。
 
 ![index页面演示](./index_image.png)
 
-**llm-api-frontend-lite** 是一个面向 OpenAI 兼容 API 的轻量级聊天前端，由 **Go 后端** + **纯静态前端** 组成，代理层使用 **Node.js**。
+**llm-api-frontend-lite** 是一个面向 OpenAI 兼容 API 的轻量级聊天前端，由 **Go 后端** + **Go 前端代理层** + **纯静态前端** 三部分组成。
 
-- **后端 (Go)**：负责用户认证、会话管理、聊天历史持久化，并将客户端请求转发至上有的 OpenAI 兼容 API（支持流式 SSE 与非流式回退）。数据库使用嵌入式 **SQLite**，零外部依赖。
-- **前端 (纯 HTML/CSS/JS)**：桌面端优先的聊天界面，支持 Markdown/LaTeX 渲染、会话历史管理、模型列表获取。不引入任何重型框架，保持极致轻量。
-- **中间层 (Node.js)**：轻量静态文件服务器，同时作为 API 代理将前端请求转发至 Go 后端，支持 SSE 流式透传。
+| 层 | 语言 | 功能 |
+|----|------|------|
+| **后端** | Go | 用户认证（用户名/密码 + Token）、会话管理、聊天历史持久化（SQLite）、OpenAI API 透明代理（`/v1/*`）、SSE 流式响应与非流式回退 |
+| **代理层** | Go | 静态文件服务器、API 请求转发至 Go 后端、SSE 流式透传 |
+| **前端** | HTML/CSS/JS | 桌面端优先的聊天界面，支持 Markdown（marked.js）与 LaTeX（KaTeX）渲染、会话历史管理、模型列表获取 |
 
-**核心特点**：零容器依赖即可运行、资源占用极低、代码简洁可读、适合个人或小团队快速部署私有 LLM 聊天服务。
+**核心特点**：遵循 `lightest` 分支理念，零容器依赖、资源占用极低、代码简洁可读、不引入任何重型前端框架。适合个人或小团队快速部署私有 LLM 聊天服务。
 
 ---
 
@@ -25,8 +27,6 @@ LLM API 的轻量化前后端一体方案 —— 极简部署，开箱即用。
 ### 环境要求
 
 - **Go** 1.21+
-- **Node.js** 18+
-- **npm** 9+
 
 ### 1. 克隆仓库并切换分支
 
@@ -51,24 +51,26 @@ cp .env.example .env
 | `OPENAI_BASE_URL` | 是 | 上游 OpenAI 兼容 API 地址 |
 | `OPENAI_API_KEY` | 是 | 上游 API 密钥 |
 | `BACKEND_PORT` | 否 | Go 后端端口，默认 `8787` |
-| `FRONTEND_PORT` | 否 | Node 前端端口，默认 `3000` |
-| `TITLE_MODEL` | 否 | 用于生成会话标题的模型名，不填则不启用自动标题 |
-| `ROOT_PSW` | 否 | root 用户的初始密码，不填则不创建 root 用户 |
-| `LOG_PATH` | 否 | 日志输出路径，默认 `./log` |
+| `FRONTEND_PORT` | 否 | Go 前端代理端口，默认 `3000` |
+| `TITLE_MODEL` | 是 | 自动生成会话标题的模型名，使用API中带有的模型 |
+| `ROOT_PSW` | 是 | root 用户初始密码 |
+| `LOG_PATH` | 是 | 日志输出路径，默认 `./log` |
 
 ### 3. 构建并运行
 
 ```bash
-# 启动 Go 后端（端口 8787）
+# 启动 Go 后端（默认端口 8787）
 cd backend
-go build -o server .
-./server &
+go build -o llm-frontend-lite-backend
+./llm-frontend-lite-backend
 
-# 启动 Node 前端（端口 3000）
-cd ../frontend
-npm install
-node server.js &
+# 启动 Go 前端代理（默认端口 3000）
+cd ../frontend/golang-proxy
+go build -o llm-frontend-proxy
+./llm-frontend-proxy
 ```
+
+> 也可使用 `go run .` 进行开发调试，无需预先编译。
 
 ### 4. 访问
 
@@ -86,36 +88,52 @@ node server.js &
 │              http://localhost:3000                   │
 └─────────────────────┬───────────────────────────────┘
                       │
-                      ▼
+        ┌─────────────┴─────────────┐
+        │   静态文件 (HTML/CSS/JS)   │   API 请求 (/chat, /history, /v1/* ...)
+        ▼                           ▼
 ┌─────────────────────────────────────────────────────┐
-│           Node.js 前端服务器 (server.js)              │
+│          Go 代理层 (frontend/golang-proxy/main.go)    │
 │       端口: FRONTEND_PORT (默认 3000)                 │
-│  · 静态文件服务 (HTML/CSS/JS)                         │
-│  · API 代理转发 → Go 后端                             │
-│  · SSE 流式透传                                      │
+│  · 静态文件服务（safePath 路径映射）                    │
+│  · API 请求转发至 Go 后端                             │
+│  · /chat → SSE 流式透传                              │
+│  · /v1/* → 透明代理                                  │
+│  · /auth/* → 认证代理                                │
 └─────────────────────┬───────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────┐
-│              Go 后端 (main.go)                       │
+│              Go 后端 (backend/main.go)                │
 │       端口: BACKEND_PORT (默认 8787)                   │
-│  · 用户认证 (用户名/密码 + Token)                     │
-│  · 会话 & 消息管理 (SQLite)                           │
-│  · 聊天处理 (SSE 流式 + 非流式回退)                    │
-│  · OpenAI API 透明代理 (/v1/*)                        │
-│  · 结构化 JSON 日志                                   │
+│  · /auth/login  — 用户名密码登录，返回 Token           │
+│  · /auth/token  — Token 校验与过期自动刷新             │
+│  · /chat        — 聊天处理（SSE 流式 + 非流式回退）     │
+│  · /title       — 自动生成会话标题                     │
+│  · /history     — 获取用户所有会话列表                  │
+│  · /history/topic — 获取指定会话完整消息               │
+│  · /v1/models        — 查询模型列表                  │
+│  · /health      — 健康检查                            │
+│  · 结构化 JSON 日志 (logging.go)                       │
 └─────────────────────┬───────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────┐
-│          上游 OpenAI 兼容 API                        │
-│         (OPENAI_BASE_URL)                           │
+│           上游 OpenAI 兼容 API                        │
+│          (OPENAI_BASE_URL)                          │
+│  · /v1/chat/completions — 聊天补全                   │
+│  · /v1/models           — 模型列表                   │
 └─────────────────────────────────────────────────────┘
+
+数据存储                     SQLite (backend/database.db)
+                              · user 表 — 用户信息
+                              · conversation 表 — 会话
+                              · message 表 — 消息记录
 ```
 
-### 后端 API 一览
+### 前端代理层 API
 
-所有 API 均通过 Node 前端代理访问，实际处理由 Go 后端完成。
+Go `frontend/golang-proxy/main.go` 作为反向代理，提供路由。
+[此处查看路由README。](./frontend/api_README.md)
 
 | 端点 | 方法 | 用途 | 请求体关键字段 |
 |------|------|------|----------------|
@@ -134,14 +152,38 @@ node server.js &
 
 ```
 frontend/
-├── index.html              # 主聊天页面
-├── server.js               # Node.js 静态服务器 + API 代理
-├── login/                  # 登录页面 (login.html + login.js)
-├── token_check/            # Token 校验页面 (token_check.html + token_check.js)
+├── index.html                   # 主聊天页面（入口 HTML）
+├── favicon.ico                  # 网站图标
+├── api_README.md                # API 文档
+├── login/
+│   ├── login.html               # 登录页面
+│   ├── login.js                 # 登录逻辑（表单提交、localStorage 持久化）
+│   └── styles.css               # 登录页样式
+├── token_check/
+│   ├── token_check.html         # Token 校验中转页
+│   └── token_check.js           # Token 校验逻辑
 ├── src/
-│   ├── app.js              # 聊天核心逻辑 (API 调用、消息渲染、会话管理)
-│   └── ...                 # 其他前端模块
-└── resources/              # 图标等静态资源
+│   ├── app.js                   # 聊天核心逻辑：API 调用、消息渲染（Markdown/LaTeX）、会话管理、流式 SSE 解析、本地历史缓存
+│   ├── api.js                   # API 辅助模块
+│   ├── events.js                # 事件绑定
+│   ├── message.js               # 消息渲染工具
+│   ├── sidebar.js               # 侧边栏交互逻辑
+│   ├── state.js                 # 全局状态管理
+│   ├── styles.css               # 主聊天样式
+│   └── utils.js                 # 工具函数
+├── golang-proxy/
+│   ├── go.mod                   # Go 模块定义（零外部依赖）
+│   ├── main.go                  # Go 静态服务器 + API 反向代理
+└── resources/
+    ├── logo.png                 # 侧边栏 Logo
+    ├── send.svg                 # 发送按钮图标
+    ├── loading.svg              # 加载动画图标
+    ├── loading_token.svg        # Token 流式渲染中图标
+    ├── copy.svg                 # 复制按钮图标
+    ├── done.svg                 # 操作完成图标
+    ├── edit.svg                 # 编辑按钮图标
+    ├── hide.svg / show.svg      # 侧边栏折叠图标
+    └── cross.svg                # 关闭图标
 ```
 
 ### 数据库说明
@@ -181,27 +223,22 @@ DELETE FROM message WHERE message_id = 123;
 
 详细数据库文档见 [backend/database_README.md](backend/database_README.md)。
 
-### 项目文件速览
+### 后端源文件速览
 
-| 路径 | 说明 |
+| 文件 | 说明 |
 |------|------|
-| `.env` / `.env.example` | 环境配置 |
-| `backend/main.go` | Go 后端入口，路由注册 |
-| `backend/login.go` | SQLite 数据库、用户认证与 Token 管理 |
-| `backend/chat_handlers.go` | 聊天、标题生成（SSE + 非流式） |
-| `backend/history.go` | 历史记录查询 |
-| `backend/proxy.go` | `/v1/*` 透明反向代理 |
-| `backend/logging.go` | 结构化 JSON 日志 |
-| `backend/file_hash.go` | 文件哈希工具 |
-| `frontend/server.js` | Node 静态服务器 + API 转发 |
-| `frontend/src/app.js` | 前端聊天核心逻辑 |
-| `frontend/login/` | 登录页面 |
-| `frontend/token_check/` | Token 校验页面 |
+| `backend/main.go` | Go 后端入口，环境变量加载、路由注册、CORS 中间件、优雅关闭 |
+| `backend/login.go` | SQLite 数据库初始化、用户增删查、Token 生成/校验/过期刷新（14 天有效期） |
+| `backend/chat_handlers.go` | `/chat` 聊天处理（SSE 流式优先 + 非流式 JSON 回退）、`/title` 标题生成 |
+| `backend/history.go` | `/history` 会话列表查询、`/history/topic` 消息历史查询 |
+| `backend/proxy.go` | `/v1/*` 透明反向代理，附加 API Key 认证头 |
+| `backend/logging.go` | 结构化 JSON 日志中间件（请求方法、路径、状态码、耗时） |
+| `backend/file_hash.go` | 文件哈希工具函数 |
 
 ### 技术细节
 
-- **流式优先**：`/chat` 端点优先尝试 SSE 流式传输；若上游返回非流式响应或流失败，自动回退至 JSON 非流式模式。
-- **Token 管理**：Token 为 32 位随机字符串，有效期 14 天。过期后自动刷新并返回新 Token。
-- **会话复用**：会话 ID 池为 0~4095（共 4096 个槽位）。创建新会话时自动回收最旧的未使用槽位。
-- **消息 ID 分配**：自动寻找最小可用 ID 间隙，避免 ID 浪费，上限 8388607。
-- **CORS**：所有 API 端点均设置允许跨域访问。
+- **流式优先策略**：`/chat` 端点优先尝试 SSE (`text/event-stream`) 流式传输；若上游返回非流式 JSON 响应，自动回退并直接解析返回。前端 `app.js` 在 SSE 流中断时同样自动降级为 JSON 请求，保证高可用。
+- **Token 管理**：Token 为 32 位加密安全随机字符串，有效期 14 天。`/auth/token` 校验时若 Token 过期但用户存在，自动生成新 Token 一并返回，前端自动更新本地存储。
+- **会话 ID 复用机制**：前端 `newConversationId()` 基于本地历史列表的最大 ID + 1 分配；后端在写入新会话时若 ID 已存在且属于其他用户，自动寻找可用槽位。配合 0~4095 的槽位池实现循环复用。
+- **CORS 全开放**：所有 API 端点均设置 `Access-Control-Allow-Origin: *`，开发阶段无需处理跨域问题。
+- **静态文件安全**：Go 代理层的 `resolveStaticPath()` 函数通过 `filepath.Clean` + 目录前缀检查防止路径遍历攻击。
