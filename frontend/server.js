@@ -120,16 +120,14 @@ async function handleChat(req, res) {
         headers["X-Conversation-Id"] = upstreamConversationId;
       }
       res.writeHead(upstream.status, headers);
-      const reader = upstream.body;
-      reader.on("data", (chunk) => {
-        res.write(chunk);
-      });
-      reader.on("end", () => {
+      try {
+        for await (const chunk of upstream.body) {
+          res.write(chunk);
+        }
         res.end();
-      });
-      reader.on("error", (err) => {
+      } catch {
         res.end();
-      });
+      }
       return;
     }
 
