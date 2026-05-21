@@ -328,85 +328,6 @@ function markActionDone(button) {
   }, 1000);
 }
 
-function setMessagePrompt(bubble, prompt) {
-  const wrapper = bubble?.closest(".message");
-  if (wrapper && prompt) {
-    wrapper.dataset.prompt = prompt;
-  }
-}
-
-function removeMessagesFrom(wrapper) {
-  if (!wrapper || !wrapper.parentElement) {
-    return;
-  }
-  let current = wrapper;
-  while (current) {
-    const next = current.nextElementSibling;
-    current.remove();
-    current = next;
-  }
-}
-
-function getRetryPrompt(wrapper) {
-  if (wrapper?.dataset.prompt) {
-    return wrapper.dataset.prompt;
-  }
-  let prev = wrapper?.previousElementSibling;
-  while (prev) {
-    if (prev.classList.contains("user")) {
-      return prev.dataset.raw || "";
-    }
-    prev = prev.previousElementSibling;
-  }
-  return "";
-}
-
-async function retryPrompt(wrapper) {
-  const prompt = getRetryPrompt(wrapper);
-  if (!prompt) {
-    showToast("无法重试该消息");
-    return;
-  }
-  removeMessagesFrom(wrapper);
-  setStatus("Thinking...");
-  setSendButtonState(true);
-  const placeholder = renderMessage("assistant", "...");
-  setMessagePrompt(placeholder, prompt);
-  try {
-    const answer = await sendMessage(prompt, placeholder);
-    if (placeholder.dataset.raw === answer) {
-      if (window.renderMathInElement) {
-        window.renderMathInElement(placeholder, {
-          delimiters: [
-            { left: "$$", right: "$$", display: true },
-            { left: "$", right: "$", display: false },
-          ],
-        });
-      }
-    } else {
-      placeholder.innerHTML = renderMarkdown(answer);
-      placeholder.dataset.raw = answer;
-      const placeholderWrapper = placeholder.closest(".message");
-      if (placeholderWrapper) {
-        placeholderWrapper.dataset.raw = answer;
-      }
-      if (window.renderMathInElement) {
-        window.renderMathInElement(placeholder, {
-          delimiters: [
-            { left: "$$", right: "$$", display: true },
-            { left: "$", right: "$", display: false },
-          ],
-        });
-      }
-    }
-  } catch (error) {
-    placeholder.textContent = "Request failed.";
-    setStatus("Request failed");
-  } finally {
-    setSendButtonState(false);
-  }
-}
-
 function loadStoredState() {
   const legacyUser = localStorage.getItem("llm.user");
   state.token = localStorage.getItem(STORAGE_KEYS.token) || "";
@@ -679,19 +600,7 @@ function renderMessage(role, content) {
       copyToClipboard(wrapper.dataset.raw || "");
     }
   );
-  if (role === "user") {
-    actions.append(copyBtn);
-  } else {
-    const retryBtn = createActionButton(
-      "resources/retry.svg",
-      "Retry message",
-      (_event, button) => {
-        markActionDone(button);
-        retryPrompt(wrapper);
-      }
-    );
-    actions.append(copyBtn, retryBtn);
-  }
+  actions.append(copyBtn);
   wrapper.appendChild(bubble);
   wrapper.appendChild(actions);
   wrapper.appendChild(meta);
@@ -1268,7 +1177,6 @@ function initEvents() {
     renderMessage("user", prompt);
     elements.promptInput.value = "";
     const placeholder = renderMessage("assistant", "...");
-    setMessagePrompt(placeholder, prompt);
     try {
       const answer = await sendMessage(prompt, placeholder);
       if (placeholder.dataset.raw === answer) {
