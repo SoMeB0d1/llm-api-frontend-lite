@@ -27,6 +27,11 @@ type historyTopicItem struct {
 	Context   string `json:"context"`
 }
 
+type historyTopicResponse struct {
+	Model    string             `json:"model"`
+	Messages []historyTopicItem `json:"messages"`
+}
+
 func handleHistoryTopic(store *loginStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -49,6 +54,19 @@ func handleHistoryTopic(store *loginStore) http.Handler {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
 				"error": "invalid_json",
+			})
+			return
+		}
+
+		var model string
+		err := db.QueryRow(
+			`SELECT model FROM conversation WHERE conversation_id = ?`,
+			payload.ConversationID,
+		).Scan(&model)
+		if err != nil {
+			log.Printf("history topic model query failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "db_error",
 			})
 			return
 		}
@@ -90,7 +108,10 @@ func handleHistoryTopic(store *loginStore) http.Handler {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(items)
+		_ = json.NewEncoder(w).Encode(historyTopicResponse{
+			Model:    model,
+			Messages: items,
+		})
 	})
 }
 

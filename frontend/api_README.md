@@ -65,20 +65,28 @@
 ```
 
 ### POST /history/topic
-- 用途：获取指定会话的全部消息记录
-- 后端实现情况：待实现（需在 backend/history.go 中新增处理函数）
+- 用途：获取指定会话的全部消息记录及模型名称
+- 后端实现情况：已实现（路由见 [backend/main.go](backend/main.go)，处理见 [backend/history.go](backend/history.go)）
 - 调用位置：主聊天页（[frontend/src/app.js](frontend/src/app.js)）历史列表按钮点击事件
 - 请求体：
 ```json
 {"conversation_id":123}
 ```
-- 期望响应字段（直接返回数组）：
+- 期望响应字段（返回对象，包含 model 和 messages 数组）：
 ```json
-[{"message_id":1,"time":"<string>","roll":"<string>","context":"<string>"}]
+{
+  "model": "<string>",
+  "messages": [
+    {"message_id":1,"time":"<string>","roll":"<string>","context":"<string>"}
+  ]
+}
 ```
+- 前端处理：
+  - 解析 `data.model` 同步到 `state.model` 并更新 `modelSelect` 下拉框
+  - 遍历 `data.messages` 逐条渲染消息
 - 错误处理：
   - 后端数据库查询失败时返回 500 `{ "error": "db_error" }`
-  - 前端收到 500 后弹窗提示“出现问题，请联系管理员”
+  - 前端收到 500 后弹窗提示"出现问题，请联系管理员"
 
 ### POST /title
 - 用途：生成并更新会话标题
@@ -105,4 +113,3 @@
 - 期望响应字段：
 ```json
 {"data":[{"id":"<string>"}]}
-```

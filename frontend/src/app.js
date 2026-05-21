@@ -944,12 +944,16 @@ async function loadConversation(conversationId) {
       return;
     }
     const data = await response.json();
-    if (!Array.isArray(data)) {
+    if (!data || typeof data !== "object" || !Array.isArray(data.messages)) {
       showToast("加载对话失败");
       setStatus("Ready");
       return;
     }
-    data.forEach((msg) => {
+    if (data.model && elements.modelSelect) {
+      state.model = data.model;
+      elements.modelSelect.value = data.model;
+    }
+    data.messages.forEach((msg) => {
       const role = msg.roll === "llm" ? "assistant" : "user";
       renderMessage(role, msg.context || "");
     });
@@ -1312,6 +1316,7 @@ async function bootstrap() {
   initEvents();
   const isValid = await validateToken();
   if (isValid) {
+    fetchModelsIfAllowed();
     loadHistory();
     return;
   }
