@@ -38,11 +38,14 @@ func initLogging() error {
 	log.SetOutput(os.Stdout)
 	log.SetFlags(log.LstdFlags)
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
+	logDir := os.Getenv("LOG_PATH")
+	if logDir == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		logDir = filepath.Join(cwd, "log")
 	}
-	logDir := filepath.Join(cwd, "log")
 	writer, err := newRotatingWriter(logDir)
 	if err != nil {
 		return err
