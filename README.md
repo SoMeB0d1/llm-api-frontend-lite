@@ -59,22 +59,38 @@ cp .env.example .env
 
 ### 3. 构建并运行
 
-**Windows**：双击 `backend/build.bat`，或在 `backend/` 目录执行：
+在 `backend/` 目录下执行对应平台的构建命令：
 
-```cmd
-build.bat
-```
-
-**通用方式**：
+**Linux**：
 
 ```bash
 cd backend
-go build -o ../llm-server.exe
+CGO_ENABLED=1 go build -ldflags="-s -w" -o ../llm-server .
 cd ..
-./llm-server.exe
+./llm-server
 ```
 
-> 构建产物 `llm-server.exe` 位于项目根目录。运行时自动加载同级 `.env` 配置，并从 `frontend/` 目录提供静态文件。
+**Windows（cmd）**：
+
+```cmd
+cd backend
+set CGO_ENABLED=1 && go build -ldflags="-s -w" -o ../llm-server.exe .
+cd ..
+llm-server.exe
+```
+
+**Windows（PowerShell）**：
+
+```powershell
+cd backend
+$env:CGO_ENABLED=1; go build -ldflags="-s -w" -o ../llm-server.exe .
+cd ..
+.\llm-server.exe
+```
+
+> `CGO_ENABLED=1` 必须开启（SQLite 依赖 CGO）。Linux 下通常已内置 gcc；Windows 需安装 [MinGW-w64](https://www.mingw-w64.org/) 或 [TDM-GCC](https://jmeubank.github.io/tdm-gcc/)。
+>
+> 构建产物 `llm-server`（Linux）或 `llm-server.exe`（Windows）位于项目根目录。运行时自动加载同级 `.env` 配置，并从 `frontend/` 目录提供静态文件。
 
 ### 4. 访问
 
@@ -273,7 +289,3 @@ DELETE FROM user;
 -- 重置自增计数器
 DELETE FROM sqlite_sequence;
 ```
-
-> `backend/.env.example` 是旧版独立后端的配置模板，现已废弃（统一使用根目录 `.env`）。该文件保留仅供历史参考。
->
-> 详细数据库 Schema 见 [backend/database_README.md](backend/database_README.md)。
