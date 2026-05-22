@@ -65,7 +65,7 @@ cp .env.example .env
 
 ```bash
 cd backend
-CGO_ENABLED=1 go build -ldflags="-s -w" -o ../llm-server .
+CGO_ENABLED=1 go build -ldflags="-s -w" -o ../llm-server
 cd ..
 ./llm-server
 ```
@@ -74,7 +74,7 @@ cd ..
 
 ```cmd
 cd backend
-set CGO_ENABLED=1 && go build -ldflags="-s -w" -o ../llm-server.exe .
+set CGO_ENABLED=1 && go build -ldflags="-s -w" -o ../llm-server.exe
 cd ..
 llm-server.exe
 ```
@@ -83,7 +83,7 @@ llm-server.exe
 
 ```powershell
 cd backend
-$env:CGO_ENABLED=1; go build -ldflags="-s -w" -o ../llm-server.exe .
+$env:CGO_ENABLED=1; go build -ldflags="-s -w" -o ../llm-server.exe
 cd ..
 .\llm-server.exe
 ```
@@ -165,7 +165,7 @@ journalctl -u llm-server -f
 
 ### API 说明
 
-> **注意**：以下 API 端点现在全部由单一 `llm-server.exe` 提供服务，无需额外代理层。在开发阶段可参考。
+> **注意**：以下 API 端点全部由单一 `llm-server.exe` 提供服务。前端静态文件由 `backend/static.go` 直接从 `frontend/` 目录读取并返回，API 路由在 `backend/main.go` 中直接注册处理。
 
 | 端点 | 方法 | 用途 | 请求体关键字段 |
 |------|------|------|----------------|
@@ -203,9 +203,6 @@ frontend/
 │   ├── state.js                 # 全局状态管理
 │   ├── styles.css               # 主聊天样式
 │   └── utils.js                 # 工具函数
-├── golang-proxy/
-│   ├── go.mod                   # Go 模块定义（零外部依赖）
-│   ├── main.go                  # [已废弃] 独立代理层，现已整合到 backend/main.go + backend/static.go
 └── resources/
     ├── logo.png                 # 侧边栏 Logo
     ├── send.svg                 # 发送按钮图标
