@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -51,11 +50,7 @@ const (
 )
 
 func openLoginStore() (*loginStore, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	dbPath := filepath.Join(cwd, "database.db")
+	dbPath := filepath.Join(findProjectDir(), "database.db")
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err

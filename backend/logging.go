@@ -40,11 +40,7 @@ func initLogging() error {
 
 	logDir := os.Getenv("LOG_PATH")
 	if logDir == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		logDir = filepath.Join(cwd, "log")
+		logDir = filepath.Join(findProjectDir(), "log")
 	}
 	writer, err := newRotatingWriter(logDir)
 	if err != nil {

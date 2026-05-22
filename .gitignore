@@ -9,9 +9,21 @@
 /frontend/log/
 
 # Local databases
+/database.db
+/database.db-shm
+/database.db-wal
+
+# Test databases
 /backend/database.db
 /backend/database.db-shm
 /backend/database.db-wal
 
-/backend/llm-api-frontend-lite.exe
-/backend/llm-api-backend.exe
+# Unified server binary
+/llm-server.exe
+
+# Legacy binary paths
+/backend/*.exe
+/frontend/golang-proxy/*.exe
+
+/.github/
+/.clinerules

@@ -50,6 +50,8 @@ type upstreamResponse struct {
 
 const defaultConversationPrompt = "You are an assistant. "
 
+var errMessageIDRangeFull = errors.New("message_id_range_full")
+
 // buildUpstreamRequest 根据 ChatRequest 和数据库历史记录构建上游请求体。
 // conversationId == -1 表示新对话，不查询数据库。
 // 数据库查询失败时返回 error。
@@ -285,13 +287,11 @@ func streamUpstream(ctx context.Context, baseURL, apiKey string, payload ChatReq
 	}
 }
 
-func (s *loginStore) createConversation(userID int64, model, prompt string) (int64, error) {
+// rmPastMessage 删除时间最靠前的 conversation 及其所有 message 和关联 files。
+// 返回被释放的 conversation_id，供 createConversation 复用。
+func (s *loginStore) rmPastMessage() (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, errors.New("login store not initialized")
-	}
-	prompt = strings.TrimSpace(prompt)
-	if prompt == "" {
-		prompt = defaultConversationPrompt
 	}
 	var conversationID int64
 	err := retryLocked(6, 400*time.Millisecond, func() error {
@@ -307,39 +307,20 @@ func (s *loginStore) createConversation(userID int64, model, prompt string) (int
 
 		txErr = tx.QueryRow(
 			`SELECT conversation_id FROM conversation
-      ORDER BY last_edit_time ASC
-      LIMIT 1`,
+			 ORDER BY last_edit_time ASC
+			 LIMIT 1`,
 		).Scan(&conversationID)
 		if txErr != nil {
-			_ = tx.Rollback()
-			return txErr
-		}
-
-		now := time.Now().UTC().Format(time.RFC3339)
-		_, txErr = tx.Exec(
-			`UPDATE conversation
-     SET user_id = ?, last_edit_time = ?, title = ?, model = ?, prompt = ?
-     WHERE conversation_id = ?`,
-			userID,
-			now,
-			"new_conversation",
-			model,
-			prompt,
-			conversationID,
-		)
-		if txErr != nil {
-			_ = tx.Rollback()
 			return txErr
 		}
 
 		_, txErr = tx.Exec(
 			`DELETE FROM files WHERE message_id IN (
-      SELECT message_id FROM message WHERE conversation_id = ?
-    )`,
+			 SELECT message_id FROM message WHERE conversation_id = ?
+		 )`,
 			conversationID,
 		)
 		if txErr != nil {
-			_ = tx.Rollback()
 			return txErr
 		}
 
@@ -348,7 +329,14 @@ func (s *loginStore) createConversation(userID int64, model, prompt string) (int
 			conversationID,
 		)
 		if txErr != nil {
-			_ = tx.Rollback()
+			return txErr
+		}
+
+		_, txErr = tx.Exec(
+			`DELETE FROM conversation WHERE conversation_id = ?`,
+			conversationID,
+		)
+		if txErr != nil {
 			return txErr
 		}
 
@@ -359,6 +347,83 @@ func (s *loginStore) createConversation(userID int64, model, prompt string) (int
 		return 0, err
 	}
 	return conversationID, nil
+}
+
+func (s *loginStore) createConversation(userID int64, model, prompt string) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, errors.New("login store not initialized")
+	}
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		prompt = defaultConversationPrompt
+	}
+
+	// 优先选取未使用过的 conversation（没有关联 message 即为未使用）
+	var conversationID int64
+	err := retryLocked(6, 400*time.Millisecond, func() error {
+		tx, txErr := s.db.Begin()
+		if txErr != nil {
+			return txErr
+		}
+		defer func() {
+			if txErr != nil {
+				_ = tx.Rollback()
+			}
+		}()
+
+		txErr = tx.QueryRow(
+			`SELECT c.conversation_id FROM conversation c
+			 LEFT JOIN message m ON c.conversation_id = m.conversation_id
+			 WHERE m.conversation_id IS NULL
+			 ORDER BY c.last_edit_time ASC
+			 LIMIT 1`,
+		).Scan(&conversationID)
+		if txErr != nil {
+			return txErr
+		}
+
+		now := time.Now().UTC().Format(time.RFC3339)
+		_, txErr = tx.Exec(
+			`UPDATE conversation
+			 SET user_id = ?, last_edit_time = ?, title = ?, model = ?, prompt = ?
+			 WHERE conversation_id = ?`,
+			userID,
+			now,
+			"new_conversation",
+			model,
+			prompt,
+			conversationID,
+		)
+		if txErr != nil {
+			return txErr
+		}
+
+		txErr = tx.Commit()
+		return txErr
+	})
+	if err == nil {
+		return conversationID, nil
+	}
+
+	// 无未使用过的 conversation：调用 rmPastMessage 释放一个，然后以此 ID 新建
+	freedID, rmErr := s.rmPastMessage()
+	if rmErr != nil {
+		return 0, rmErr
+	}
+
+	err = retryLocked(6, 400*time.Millisecond, func() error {
+		now := time.Now().UTC().Format(time.RFC3339)
+		_, txErr := s.db.Exec(
+			`INSERT INTO conversation (conversation_id, user_id, last_edit_time, title, model, prompt)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			freedID, userID, now, "new_conversation", model, prompt,
+		)
+		return txErr
+	})
+	if err != nil {
+		return 0, err
+	}
+	return freedID, nil
 }
 
 func (s *loginStore) createMessage(conversationID int64, roll, context string) (int64, error) {
@@ -405,7 +470,7 @@ func (s *loginStore) createMessage(conversationID int64, roll, context string) (
 					return txErr
 				}
 				if !next.Valid {
-					return errors.New("message_id_range_full")
+					return errMessageIDRangeFull
 				}
 				messageID = next.Int64
 			}
@@ -438,6 +503,12 @@ func (s *loginStore) createMessage(conversationID int64, roll, context string) (
 		})
 		if err == nil {
 			return messageID, nil
+		}
+		if errors.Is(err, errMessageIDRangeFull) {
+			if _, rmErr := s.rmPastMessage(); rmErr != nil {
+				logConsolef("rmPastMessage failed: %v", rmErr)
+			}
+			continue
 		}
 		if isConstraintError(err) {
 			continue
