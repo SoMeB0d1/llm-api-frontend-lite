@@ -1,0 +1,17 @@
+[Unit]
+Description=LLM API Frontend Lite Server
+After=network.target
+
+[Service]
+Type=simple
+User=<USER>
+WorkingDirectory=/path/to/llm-api-frontend-lite/llm-server
+ExecStart=/path/to/llm-api-frontend-lite/llm-server
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=llm-server
+
+[Install]
+WantedBy=multi-user.target

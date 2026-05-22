@@ -92,9 +92,32 @@ cd ..
 >
 > 构建产物 `llm-server`（Linux）或 `llm-server.exe`（Windows）位于项目根目录。运行时自动加载同级 `.env` 配置，并从 `frontend/` 目录提供静态文件。
 
-### 4. 访问
+### 4. （可选）安装为 Linux 系统服务
 
-浏览器打开 `http://localhost:8787`，使用登录页进行认证（若配置了 `ROOT_PSW`，用户名 `root`）。登录后即可开始对话。
+使用项目根目录的 `llm-server.service` 文件注册 systemd 服务：
+
+```bash
+# 1. 配置service中路径和运行用户
+# 将仓库根目录路径替换service中/path/to/llm-api-frontend-lite
+# 将运行用户替换<USER>
+nano ./llm-server.service
+
+# 2. 安装并启动服务
+sudo cp llm-server.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable llm-server
+sudo systemctl start llm-server
+
+# 3. 查看状态与日志
+systemctl status llm-server
+journalctl -u llm-server -f
+```
+
+> 注意：若部署路径或运行用户与实际环境不同，请相应修改 `llm-server.service` 中的 `User`、`WorkingDirectory`、`ExecStart` 字段。
+
+### 5. 访问
+
+浏览器打开 `http://localhost:OPEN_PORT`，使用登录页进行认证（root, ROOT_PSW）。登录后即可开始对话。
 
 ---
 
