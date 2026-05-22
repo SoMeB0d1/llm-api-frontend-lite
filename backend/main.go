@@ -14,9 +14,53 @@ import (
 	"time"
 )
 
-func loadEnvFromFile() {
+func exeDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "."
+	}
+	return filepath.Dir(exe)
+}
+
+// findProjectDir returns the best-guess project root directory.
+// Priority: exeDir > parent(exeDir) > cwd > parent(cwd).
+// This covers both production (exe in root) and go run . (exe in temp, cwd in backend/).
+func findProjectDir() string {
 	cwd, _ := os.Getwd()
-	path := filepath.Join(cwd, "..", ".env")
+
+	candidates := []string{
+		exeDir(),
+		filepath.Dir(exeDir()),
+		cwd,
+	}
+	if cwd != "" {
+		candidates = append(candidates, filepath.Dir(cwd))
+	}
+
+	for _, dir := range candidates {
+		if dir == "" {
+			continue
+		}
+		// Check for .env as a marker file
+		if _, err := os.Stat(filepath.Join(dir, ".env")); err == nil {
+			return dir
+		}
+		// Also accept frontend/ directory as marker
+		if info, err := os.Stat(filepath.Join(dir, "frontend")); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+
+	// Fallback: return exeDir()
+	ed := exeDir()
+	if ed != "" {
+		return ed
+	}
+	return cwd
+}
+
+func loadEnvFromFile() {
+	path := filepath.Join(findProjectDir(), ".env")
 	file, err := os.Open(path)
 	if err != nil {
 		return
@@ -61,7 +105,7 @@ func main() {
 	targetRaw := mustGetEnv("OPENAI_BASE_URL")
 	apiKey := mustGetEnv("OPENAI_API_KEY")
 	titleModel := os.Getenv("TITLE_MODEL")
-	port := os.Getenv("BACKEND_PORT")
+	port := os.Getenv("OPEN_PORT")
 	if port == "" {
 		port = "8787"
 	}
@@ -104,9 +148,18 @@ func main() {
 	mux.Handle("/v1/", withCORS(proxy))
 	mux.Handle("/v1", withCORS(proxy))
 
+	// 静态文件服务（fallback：未匹配 API 路由时）
+	projectDir := findProjectDir()
+	pubDir := filepath.Join(projectDir, "frontend")
+	log.Printf("Serving static files from: %s", pubDir)
+	staticHandler := withCORS(handleStatic(pubDir))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		staticHandler.ServeHTTP(w, r)
+	})
+
 	addr := ":" + port
 	server := &http.Server{Addr: addr, Handler: logJSONMiddleware(mux)}
-	log.Printf("Go proxy listening on %s", addr)
+	log.Printf("Unified server listening on %s", addr)
 
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)

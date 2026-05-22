@@ -10,12 +10,11 @@ LLM API 的轻量化前后端一体方案 —— 极简部署，开箱即用。
 
 ![index页面演示](./index_image.png)
 
-**llm-api-frontend-lite** 是一个面向 OpenAI 兼容 API 的轻量级聊天前端，由 **Go 后端** + **Go 前端代理层** + **纯静态前端** 三部分组成。
+**llm-api-frontend-lite** 是一个面向 OpenAI 兼容 API 的轻量级聊天前端。项目编译为**单一可执行文件**（`llm-server.exe`），同时提供 API 服务和静态前端页面，无需两个进程协同。
 
 | 层 | 语言 | 功能 |
 |----|------|------|
-| **后端** | Go | 用户认证（用户名/密码 + Token）、会话管理、聊天历史持久化（SQLite）、OpenAI API 透明代理（`/v1/*`）、SSE 流式响应与非流式回退 |
-| **代理层** | Go | 静态文件服务器、API 请求转发至 Go 后端、SSE 流式透传 |
+| **后端** | Go | 用户认证（用户名/密码 + Token）、会话管理、聊天历史持久化（SQLite）、OpenAI API 透明代理（`/v1/*`）、SSE 流式响应与非流式回退、静态文件服务（前端页面） |
 | **前端** | HTML/CSS/JS | 桌面端优先的聊天界面，支持 Markdown（marked.js）与 LaTeX（KaTeX）渲染、会话历史管理、模型列表获取 |
 
 **核心特点**：遵循 `lightest` 分支理念，零容器依赖、资源占用极低、代码简洁可读、不引入任何重型前端框架。适合个人或小团队快速部署私有 LLM 聊天服务。
@@ -27,6 +26,7 @@ LLM API 的轻量化前后端一体方案 —— 极简部署，开箱即用。
 ### 环境要求
 
 - **Go** 1.21+
+- **gcc**（Windows 下推荐安装 [MinGW-w64](https://www.mingw-w64.org/) 或 [TDM-GCC](https://jmeubank.github.io/tdm-gcc/)，SQLite 需要 CGO）
 
 ### 1. 克隆仓库并切换分支
 
@@ -50,31 +50,35 @@ cp .env.example .env
 |------|------|------|
 | `OPENAI_BASE_URL` | 是 | 上游 OpenAI 兼容 API 地址 |
 | `OPENAI_API_KEY` | 是 | 上游 API 密钥 |
-| `BACKEND_PORT` | 否 | Go 后端端口，默认 `8787` |
-| `FRONTEND_PORT` | 否 | Go 前端代理端口，默认 `3000` |
-| `TITLE_MODEL` | 是 | 自动生成会话标题的模型名，使用API中带有的模型 |
+| `OPEN_PORT` | 否 | 服务端口，默认 `8787` |
+| `TITLE_MODEL` | 是 | 自动生成会话标题的模型名，使用 API 中带有的模型 |
 | `ROOT_PSW` | 是 | root 用户初始密码 |
 | `LOG_PATH` | 是 | 日志输出路径，默认 `./log` |
 
+> `.env` 文件必须与 `llm-server.exe` 放在同一目录。
+
 ### 3. 构建并运行
 
-```bash
-# 启动 Go 后端（默认端口 8787）
-cd backend
-go build -o llm-frontend-lite-backend
-./llm-frontend-lite-backend
+**Windows**：双击 `backend/build.bat`，或在 `backend/` 目录执行：
 
-# 启动 Go 前端代理（默认端口 3000）
-cd ../frontend/golang-proxy
-go build -o llm-frontend-proxy
-./llm-frontend-proxy
+```cmd
+build.bat
 ```
 
-> 也可使用 `go run .` 进行开发调试，无需预先编译。
+**通用方式**：
+
+```bash
+cd backend
+go build -o ../llm-server.exe
+cd ..
+./llm-server.exe
+```
+
+> 构建产物 `llm-server.exe` 位于项目根目录。运行时自动加载同级 `.env` 配置，并从 `frontend/` 目录提供静态文件。
 
 ### 4. 访问
 
-浏览器打开 `http://localhost:3000`，使用登录页进行认证（若配置了 `ROOT_PSW`，用户名 `root`）。登录后即可开始对话。
+浏览器打开 `http://localhost:8787`，使用登录页进行认证（若配置了 `ROOT_PSW`，用户名 `root`）。登录后即可开始对话。
 
 ---
 
@@ -85,26 +89,16 @@ go build -o llm-frontend-proxy
 ```
 ┌─────────────────────────────────────────────────────┐
 │                    用户浏览器                         │
-│              http://localhost:3000                   │
+│              http://localhost:8787                   │
 └─────────────────────┬───────────────────────────────┘
                       │
-        ┌─────────────┴─────────────┐
-        │   静态文件 (HTML/CSS/JS)   │   API 请求 (/chat, /history, /v1/* ...)
-        ▼                           ▼
+          ┌───────────┴───────────┐
+          │   静态文件 (HTML/CSS)  │   API 请求 (/chat, /history, /v1/* ...)
+          ▼                       ▼
 ┌─────────────────────────────────────────────────────┐
-│          Go 代理层 (frontend/golang-proxy/main.go)    │
-│       端口: FRONTEND_PORT (默认 3000)                 │
-│  · 静态文件服务（safePath 路径映射）                    │
-│  · API 请求转发至 Go 后端                             │
-│  · /chat → SSE 流式透传                              │
-│  · /v1/* → 透明代理                                  │
-│  · /auth/* → 认证代理                                │
-└─────────────────────┬───────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│              Go 后端 (backend/main.go)                │
-│       端口: BACKEND_PORT (默认 8787)                   │
+│              单一可执行文件 (llm-server.exe)           │
+│            端口: OPEN_PORT (默认 8787)                 │
+│  · 静态文件服务（frontend/ 目录）                      │
 │  · /auth/login  — 用户名密码登录，返回 Token           │
 │  · /auth/token  — Token 校验与过期自动刷新             │
 │  · /chat        — 聊天处理（SSE 流式 + 非流式回退）     │
@@ -124,15 +118,16 @@ go build -o llm-frontend-proxy
 │  · /v1/models           — 模型列表                   │
 └─────────────────────────────────────────────────────┘
 
-数据存储                     SQLite (backend/database.db)
+数据存储                     SQLite (database.db，位于 exe 同级目录)
                               · user 表 — 用户信息
                               · conversation 表 — 会话
                               · message 表 — 消息记录
 ```
 
-### 前端代理层 API
+### API 说明
 
-Go `frontend/golang-proxy/main.go` 作为反向代理，提供路由。
+> **注意**：以下 API 端点现在全部由单一 `llm-server.exe` 提供服务，无需额外代理层。
+
 [此处查看路由README。](./frontend/api_README.md)
 
 | 端点 | 方法 | 用途 | 请求体关键字段 |
@@ -173,7 +168,7 @@ frontend/
 │   └── utils.js                 # 工具函数
 ├── golang-proxy/
 │   ├── go.mod                   # Go 模块定义（零外部依赖）
-│   ├── main.go                  # Go 静态服务器 + API 反向代理
+│   ├── main.go                  # [已废弃] 独立代理层，现已整合到 backend/main.go + backend/static.go
 └── resources/
     ├── logo.png                 # 侧边栏 Logo
     ├── send.svg                 # 发送按钮图标
@@ -188,7 +183,7 @@ frontend/
 
 ### 数据库说明
 
-后端使用 **SQLite** 存储所有数据（文件位于 `backend/database.db`），包含以下表：
+后端使用 **SQLite** 存储所有数据，数据库文件 `database.db` 位于 **exe 所在目录**（即项目根目录），包含以下表：
 
 | 表名 | 用途 |
 |------|------|
@@ -200,7 +195,7 @@ frontend/
 **注意**：当前项目**不提供数据库编辑的 Web 界面或 API**。如需手动管理用户、修改会话标题或清理数据，请直接使用 SQLite 命令行工具操作：
 
 ```bash
-cd backend
+# 在 exe 所在目录执行
 sqlite3 database.db
 ```
 
@@ -227,7 +222,8 @@ DELETE FROM message WHERE message_id = 123;
 
 | 文件 | 说明 |
 |------|------|
-| `backend/main.go` | Go 后端入口，环境变量加载、路由注册、CORS 中间件、优雅关闭 |
+| `backend/main.go` | Go 后端入口，环境变量加载（`OPEN_PORT`）、路由注册、CORS 中间件、静态文件 fallback、优雅关闭 |
+| `backend/static.go` | 静态文件服务模块，处理 SPA 路由（`/`、`/login`、`/token_check`）及路径遍历防护 |
 | `backend/login.go` | SQLite 数据库初始化、用户增删查、Token 生成/校验/过期刷新（14 天有效期） |
 | `backend/chat_handlers.go` | `/chat` 聊天处理（SSE 流式优先 + 非流式 JSON 回退）、`/title` 标题生成 |
 | `backend/history.go` | `/history` 会话列表查询、`/history/topic` 消息历史查询 |
@@ -241,4 +237,43 @@ DELETE FROM message WHERE message_id = 123;
 - **Token 管理**：Token 为 32 位加密安全随机字符串，有效期 14 天。`/auth/token` 校验时若 Token 过期但用户存在，自动生成新 Token 一并返回，前端自动更新本地存储。
 - **会话 ID 复用机制**：前端 `newConversationId()` 基于本地历史列表的最大 ID + 1 分配；后端在写入新会话时若 ID 已存在且属于其他用户，自动寻找可用槽位。配合 0~4095 的槽位池实现循环复用。
 - **CORS 全开放**：所有 API 端点均设置 `Access-Control-Allow-Origin: *`，开发阶段无需处理跨域问题。
-- **静态文件安全**：Go 代理层的 `resolveStaticPath()` 函数通过 `filepath.Clean` + 目录前缀检查防止路径遍历攻击。
+- **路径安全**：静态文件模块通过 `filepath.Clean` + 目录前缀检查防止路径遍历攻击；所有路径均基于 `os.Executable()` 动态定位 exe 所在目录。
+
+---
+
+## 调试：backend 目录下数据库说明
+
+`backend/` 目录下可能残留一份 `database.db`，这是**旧版后端独立运行时的数据库文件**。当前统一单 exe 版本中：
+
+- **生产数据**位于 exe 同级目录（`database.db`）
+- **backend/ 下的 database.db** 仅供开发调试使用，不会被 exe 加载
+
+若需在开发时直接操作 backend 下的调试数据库：
+
+```bash
+cd backend
+sqlite3 database.db
+```
+
+```sql
+-- 查看所有用户
+SELECT * FROM user;
+
+-- 查看会话列表
+SELECT conversation_id, user_id, title, last_edit_time FROM conversation;
+
+-- 查看某会话的消息
+SELECT message_id, time, roll, substr(context, 1, 80) FROM message WHERE conversation_id = 0;
+
+-- 清空测试数据
+DELETE FROM message;
+DELETE FROM conversation;
+DELETE FROM user;
+
+-- 重置自增计数器
+DELETE FROM sqlite_sequence;
+```
+
+> `backend/.env.example` 是旧版独立后端的配置模板，现已废弃（统一使用根目录 `.env`）。该文件保留仅供历史参考。
+>
+> 详细数据库 Schema 见 [backend/database_README.md](backend/database_README.md)。
