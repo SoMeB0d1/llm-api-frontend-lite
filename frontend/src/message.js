@@ -1,13 +1,8 @@
-function renderMarkdown(text) {
-  if (window.marked) {
-    return window.marked.parse(text, { breaks: true });
-  }
-  return text
-    .replace(/&/g, "&")
-    .replace(/</g, "<")
-    .replace(/>/g, ">")
-    .replace(/\n/g, "<br>");
-}
+import { elements } from "./elements.js";
+import { renderMarkdown, renderPlainText } from "./markdown.js";
+import { copyToClipboard, markActionDone } from "./ui.js";
+import { formatSummary } from "./utils.js";
+import { state, setNewChatState } from "./state.js";
 
 function createActionButton(icon, label, onClick) {
   const button = document.createElement("button");
@@ -31,7 +26,13 @@ function renderMessage(role, content) {
   wrapper.dataset.raw = content;
   const bubble = document.createElement("div");
   bubble.className = "bubble";
-  bubble.innerHTML = renderMarkdown(content);
+  const isUser = role === "user";
+  if (!isUser && content === "...") {
+    bubble.innerHTML =
+      '<div class="loading-token"><img src="resources/loading_token.svg" alt="Loading" /></div>';
+  } else {
+    bubble.innerHTML = isUser ? renderPlainText(content) : renderMarkdown(content);
+  }
   bubble.dataset.raw = content;
   const meta = document.createElement("div");
   meta.className = "message-meta";
@@ -46,19 +47,7 @@ function renderMessage(role, content) {
       copyToClipboard(wrapper.dataset.raw || "");
     }
   );
-  if (role === "user") {
-    actions.append(copyBtn);
-  } else {
-    const retryBtn = createActionButton(
-      "resources/retry.svg",
-      "Retry message",
-      (_event, button) => {
-        markActionDone(button);
-        retryPrompt(wrapper);
-      }
-    );
-    actions.append(copyBtn, retryBtn);
-  }
+  actions.append(copyBtn);
   wrapper.appendChild(bubble);
   wrapper.appendChild(actions);
   wrapper.appendChild(meta);
@@ -75,75 +64,7 @@ function renderMessage(role, content) {
   return bubble;
 }
 
-function setMessagePrompt(bubble, prompt) {
-  const wrapper = bubble?.closest(".message");
-  if (wrapper && prompt) {
-    wrapper.dataset.prompt = prompt;
-  }
-}
-
-function removeMessagesFrom(wrapper) {
-  if (!wrapper || !wrapper.parentElement) {
-    return;
-  }
-  let current = wrapper;
-  while (current) {
-    const next = current.nextElementSibling;
-    current.remove();
-    current = next;
-  }
-}
-
-function getRetryPrompt(wrapper) {
-  if (wrapper?.dataset.prompt) {
-    return wrapper.dataset.prompt;
-  }
-  let prev = wrapper?.previousElementSibling;
-  while (prev) {
-    if (prev.classList.contains("user")) {
-      return prev.dataset.raw || "";
-    }
-    prev = prev.previousElementSibling;
-  }
-  return "";
-}
-
-async function retryPrompt(wrapper) {
-  const prompt = getRetryPrompt(wrapper);
-  if (!prompt) {
-    showToast("无法重试该消息");
-    return;
-  }
-  removeMessagesFrom(wrapper);
-  setStatus("Thinking...");
-  setSendButtonState(true);
-  const placeholder = renderMessage("assistant", "...");
-  setMessagePrompt(placeholder, prompt);
-  try {
-    const answer = await sendMessage(prompt);
-    placeholder.innerHTML = renderMarkdown(answer);
-    placeholder.dataset.raw = answer;
-    const placeholderWrapper = placeholder.closest(".message");
-    if (placeholderWrapper) {
-      placeholderWrapper.dataset.raw = answer;
-    }
-    if (window.renderMathInElement) {
-      window.renderMathInElement(placeholder, {
-        delimiters: [
-          { left: "$$", right: "$$", display: true },
-          { left: "$", right: "$", display: false },
-        ],
-      });
-    }
-  } catch (error) {
-    placeholder.textContent = "Request failed.";
-    setStatus("Request failed");
-  } finally {
-    setSendButtonState(false);
-  }
-}
-
-function renderHistory() {
+function renderHistory(onSelectConversation) {
   elements.historyList.innerHTML = "";
   if (!state.history.length) {
     return;
@@ -153,12 +74,24 @@ function renderHistory() {
     entry.className = "history-item";
     entry.type = "button";
     entry.textContent = formatSummary(item);
-    if (item?.conversation_id !== undefined && item?.conversation_id !== null) {
+    if (
+      item?.conversation_id !== undefined &&
+      item?.conversation_id !== null &&
+      typeof onSelectConversation === "function"
+    ) {
       entry.dataset.conversationId = String(item.conversation_id);
       entry.addEventListener("click", () => {
-        loadConversation(item.conversation_id);
+        onSelectConversation(item.conversation_id);
       });
     }
     elements.historyList.appendChild(entry);
   });
 }
+
+function resetChat() {
+  elements.chatHistory.innerHTML = "";
+  state.conversationId = -1;
+  setNewChatState(true);
+}
+
+export { renderMessage, renderHistory, resetChat };

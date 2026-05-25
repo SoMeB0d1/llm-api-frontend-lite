@@ -210,35 +210,8 @@ func (s *loginStore) ensureConversationSeed() error {
 	if s == nil || s.db == nil {
 		return errors.New("login store not initialized")
 	}
-	var count int
-	if err := s.db.QueryRow("SELECT COUNT(1) FROM conversation").Scan(&count); err != nil {
-		return err
-	}
-	if count != 0 {
-		return nil
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	stmt, err := tx.Prepare(`INSERT INTO conversation (conversation_id, user_id, last_edit_time, title, model, prompt)
-    VALUES (?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		_ = tx.Rollback()
-		return err
-	}
-	defer stmt.Close()
-
-	for id := 0; id <= 4095; id++ {
-		title := fmt.Sprintf("notused_conversation_%d", id)
-		if _, err := stmt.Exec(id, 0, now, title, "deepseek-v4-flash", "0"); err != nil {
-			_ = tx.Rollback()
-			return err
-		}
-	}
-	return tx.Commit()
+	// 不再预填充 conversation 表，按需创建。
+	return nil
 }
 
 func (s *loginStore) ensureRootUser(password string) error {

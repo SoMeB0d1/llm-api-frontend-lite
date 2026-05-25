@@ -51,6 +51,7 @@ type upstreamResponse struct {
 const defaultConversationPrompt = "You are an assistant. "
 
 var errMessageIDRangeFull = errors.New("message_id_range_full")
+var errConversationIDRangeFull = errors.New("conversation_id_range_full")
 
 // buildUpstreamRequest 根据 ChatRequest 和数据库历史记录构建上游请求体。
 // conversationId == -1 表示新对话，不查询数据库。
@@ -379,6 +380,44 @@ func (s *loginStore) createConversation(userID int64, model, prompt string) (int
 			 LIMIT 1`,
 		).Scan(&conversationID)
 		if txErr != nil {
+			if errors.Is(txErr, sql.ErrNoRows) {
+				var nextID int64
+				txErr = tx.QueryRow(
+					`SELECT COALESCE(
+             (SELECT 0 WHERE NOT EXISTS (SELECT 1 FROM conversation WHERE conversation_id = 0)),
+             (SELECT c1.conversation_id + 1
+              FROM conversation c1
+              LEFT JOIN conversation c2 ON c2.conversation_id = c1.conversation_id + 1
+              WHERE c2.conversation_id IS NULL AND c1.conversation_id < 4095
+              ORDER BY c1.conversation_id ASC
+              LIMIT 1),
+             -1
+           )`,
+				).Scan(&nextID)
+				if txErr != nil {
+					return txErr
+				}
+				if nextID < 0 {
+					return errConversationIDRangeFull
+				}
+				conversationID = nextID
+				now := time.Now().UTC().Format(time.RFC3339)
+				_, txErr = tx.Exec(
+					`INSERT INTO conversation (conversation_id, user_id, last_edit_time, title, model, prompt)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+					conversationID,
+					userID,
+					now,
+					"new_conversation",
+					model,
+					prompt,
+				)
+				if txErr != nil {
+					return txErr
+				}
+				txErr = tx.Commit()
+				return txErr
+			}
 			return txErr
 		}
 
@@ -405,25 +444,29 @@ func (s *loginStore) createConversation(userID int64, model, prompt string) (int
 		return conversationID, nil
 	}
 
-	// 无未使用过的 conversation：调用 rmPastMessage 释放一个，然后以此 ID 新建
-	freedID, rmErr := s.rmPastMessage()
-	if rmErr != nil {
-		return 0, rmErr
+	if errors.Is(err, errConversationIDRangeFull) {
+		// conversation_id 用尽：调用 rmPastMessage 释放一个，然后以此 ID 新建
+		freedID, rmErr := s.rmPastMessage()
+		if rmErr != nil {
+			return 0, rmErr
+		}
+
+		err = retryLocked(6, 400*time.Millisecond, func() error {
+			now := time.Now().UTC().Format(time.RFC3339)
+			_, txErr := s.db.Exec(
+				`INSERT INTO conversation (conversation_id, user_id, last_edit_time, title, model, prompt)
+				 VALUES (?, ?, ?, ?, ?, ?)`,
+				freedID, userID, now, "new_conversation", model, prompt,
+			)
+			return txErr
+		})
+		if err != nil {
+			return 0, err
+		}
+		return freedID, nil
 	}
 
-	err = retryLocked(6, 400*time.Millisecond, func() error {
-		now := time.Now().UTC().Format(time.RFC3339)
-		_, txErr := s.db.Exec(
-			`INSERT INTO conversation (conversation_id, user_id, last_edit_time, title, model, prompt)
-			 VALUES (?, ?, ?, ?, ?, ?)`,
-			freedID, userID, now, "new_conversation", model, prompt,
-		)
-		return txErr
-	})
-	if err != nil {
-		return 0, err
-	}
-	return freedID, nil
+	return 0, err
 }
 
 func (s *loginStore) createMessage(conversationID int64, roll, context string) (int64, error) {

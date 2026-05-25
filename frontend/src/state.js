@@ -1,20 +1,9 @@
-const SIDEBAR_ICONS = {
-  hide: "resources/hide.svg",
-  show: "resources/show.svg",
-};
-
-const SEND_ICONS = {
-  send: "resources/send.svg",
-  loading: "resources/loading.svg",
-};
-
-const STORAGE_KEYS = {
-  token: "llm.token",
-  userId: "llm.userId",
-  userName: "llm.userName",
-  baseUrl: "llm.baseUrl",
-  history: "llm.history",
-};
+import { elements } from "./elements.js";
+import {
+  STORAGE_KEYS,
+  DEFAULT_SYSTEM_PROMPT,
+  MAX_CONVERSATION_ID,
+} from "./constants.js";
 
 const state = {
   baseUrl: "",
@@ -23,11 +12,10 @@ const state = {
   userName: "guest",
   conversationId: -1,
   model: "deepseek-v4-flash",
+  systemPromptApplied: DEFAULT_SYSTEM_PROMPT,
   isNewChat: true,
   history: [],
 };
-
-const MAX_CONVERSATION_ID = 4095;
 
 function newConversationId() {
   let maxId = -1;
@@ -46,6 +34,26 @@ function newConversationId() {
   return next;
 }
 
+function syncSystemPromptInputState() {
+  if (!elements.systemPromptInput) {
+    return;
+  }
+  elements.systemPromptInput.value =
+    state.systemPromptApplied || DEFAULT_SYSTEM_PROMPT;
+  elements.systemPromptInput.disabled = !state.isNewChat;
+  if (elements.savePromptBtn) {
+    elements.savePromptBtn.disabled = !state.isNewChat;
+  }
+}
+
+function setNewChatState(isNew) {
+  state.isNewChat = isNew;
+  if (elements.modelSelect) {
+    elements.modelSelect.disabled = !isNew;
+  }
+  syncSystemPromptInputState();
+}
+
 function loadStoredState() {
   const legacyUser = localStorage.getItem("llm.user");
   state.token = localStorage.getItem(STORAGE_KEYS.token) || "";
@@ -54,8 +62,7 @@ function loadStoredState() {
   state.userId = Number.isFinite(numericUserId) ? numericUserId : 0;
   state.userName =
     localStorage.getItem(STORAGE_KEYS.userName) || legacyUser || "guest";
-  state.baseUrl =
-    localStorage.getItem(STORAGE_KEYS.baseUrl) || state.baseUrl;
+  state.baseUrl = localStorage.getItem(STORAGE_KEYS.baseUrl) || state.baseUrl;
   const cachedHistory = localStorage.getItem(STORAGE_KEYS.history);
   if (cachedHistory) {
     try {
@@ -68,16 +75,9 @@ function loadStoredState() {
   setNewChatState(true);
 }
 
-function setNewChatState(isNew) {
-  state.isNewChat = isNew;
-  if (elements.modelSelect) {
-    elements.modelSelect.disabled = !isNew;
-  }
-}
-
 function setUserId(id, name) {
   const numericId = Number(id);
-  state.userId = Number.isFinite(numericId) ? numericId : (state.userId || 0);
+  state.userId = Number.isFinite(numericId) ? numericId : state.userId || 0;
   state.userName = name || state.userName || "guest";
   elements.userId.textContent = state.userName;
   saveAuth();
@@ -96,3 +96,14 @@ function saveAuth() {
   localStorage.setItem(STORAGE_KEYS.userId, state.userId);
   localStorage.setItem(STORAGE_KEYS.userName, state.userName);
 }
+
+export {
+  state,
+  newConversationId,
+  setNewChatState,
+  loadStoredState,
+  setUserId,
+  setBaseUrl,
+  saveAuth,
+  syncSystemPromptInputState,
+};

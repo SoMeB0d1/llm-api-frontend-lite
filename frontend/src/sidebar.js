@@ -1,3 +1,7 @@
+import { elements } from "./elements.js";
+import { SIDEBAR_ICONS } from "./constants.js";
+import { isMobile } from "./ui.js";
+
 function setSidebarAnimating(animating) {
   if (!elements.app) {
     return;
@@ -121,3 +125,11 @@ function hideSidebarMobile() {
     setMenuDisabled(false);
   });
 }
+
+export {
+  collapseSidebarDesktop,
+  expandSidebarDesktop,
+  showSidebarMobile,
+  hideSidebarMobile,
+  setMenuDisabled,
+};
