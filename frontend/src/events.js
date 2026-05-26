@@ -21,7 +21,7 @@ import {
   toggleModal,
 } from "./ui.js";
 import { renderMessage, resetChat } from "./message.js";
-import { fetchModelsIfAllowed, sendMessage, sendBack } from "./api.js";
+import { fetchModelsIfAllowed, loadConversation, sendMessage, sendBack } from "./api.js";
 import { renderMarkdown } from "./markdown.js";
 
 function initEvents() {
@@ -130,6 +130,9 @@ function initEvents() {
       }
       try {
         await sendBack(messageId);
+        if (Number.isFinite(state.conversationId) && state.conversationId >= 0) {
+          await loadConversation(state.conversationId);
+        }
         showToast("已提交回溯请求", "success");
       } catch (error) {
         if (error?.message !== "server_error") {

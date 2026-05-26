@@ -51,6 +51,17 @@ function getTimeoutSignal(timeoutMs) {
   return { controller, timeout };
 }
 
+function applyMessageIdToPlaceholder(placeholder, messageId) {
+  const numericId = Number(messageId);
+  if (!Number.isFinite(numericId) || !placeholder) {
+    return;
+  }
+  const wrapper = placeholder.closest(".message");
+  if (wrapper) {
+    wrapper.dataset.messageId = String(numericId);
+  }
+}
+
 async function apiFetch(path, options = {}) {
   const timeoutMs = 20000;
   const { controller, timeout } = getTimeoutSignal(timeoutMs);
@@ -341,12 +352,19 @@ async function fetchStream(prompt, placeholder) {
       state.conversationId = parsed;
     }
   }
+  const headerMessageId = response.headers.get("x-message-id");
+  if (headerMessageId) {
+    applyMessageIdToPlaceholder(placeholder, headerMessageId);
+  }
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.startsWith("text/event-stream")) {
     try {
       const json = await response.json();
       if (typeof json.conversationId === "number") {
         state.conversationId = json.conversationId;
+      }
+      if (typeof json.messageId === "number") {
+        applyMessageIdToPlaceholder(placeholder, json.messageId);
       }
       return json.answer || "(no response)";
     } catch (e) {
@@ -417,6 +435,9 @@ async function sendMessage(prompt, placeholder) {
   });
   if (typeof response.conversationId === "number") {
     state.conversationId = response.conversationId;
+  }
+  if (typeof response.messageId === "number") {
+    applyMessageIdToPlaceholder(placeholder, response.messageId);
   }
   setStatus("Ready");
   await refreshHistoryAfterChat();

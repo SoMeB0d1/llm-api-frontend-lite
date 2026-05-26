@@ -26,6 +26,7 @@ type ChatResponse struct {
 	Answer         string `json:"answer"`
 	Model          string `json:"model"`
 	ConversationID int64  `json:"conversationId"`
+	MessageID      int64  `json:"messageId"`
 }
 
 type upstreamMessage struct {
@@ -178,25 +179,25 @@ func callUpstream(ctx context.Context, baseURL, apiKey string, payload ChatReque
 // streamUpstream attempts SSE streaming from upstream.
 // Returns (streamed=true, err) — if streamed, headers were already written.
 // Returns (streamed=false, err) if caller should fall back to non-streaming.
-func streamUpstream(ctx context.Context, baseURL, apiKey string, payload ChatRequest, store *loginStore, w http.ResponseWriter) (bool, string, error) {
+func streamUpstream(ctx context.Context, baseURL, apiKey string, payload ChatRequest, store *loginStore, w http.ResponseWriter) (bool, string, int64, error) {
 	reqBody, err := buildUpstreamRequest(payload, store, true)
 	if err != nil {
-		return false, "", err
+		return false, "", -1, err
 	}
 	data, err := json.Marshal(reqBody)
 	if err != nil {
-		return false, "", err
+		return false, "", -1, err
 	}
 
 	resp, err := doUpstream(ctx, baseURL, apiKey, data)
 	if err != nil {
-		return false, "", err
+		return false, "", -1, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		return false, "", fmt.Errorf("upstream status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return false, "", -1, fmt.Errorf("upstream status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	contentType := resp.Header.Get("Content-Type")
@@ -204,19 +205,30 @@ func streamUpstream(ctx context.Context, baseURL, apiKey string, payload ChatReq
 		// 上游返回非 SSE（JSON），直接解析 body 并回写，不回退到 callUpstream
 		body, readErr := io.ReadAll(resp.Body)
 		if readErr != nil {
-			return false, "", readErr
+			return false, "", -1, readErr
 		}
 		var parsed upstreamResponse
 		if err := json.Unmarshal(body, &parsed); err != nil || len(parsed.Choices) == 0 {
-			return false, "", fmt.Errorf("non-stream parse error: %w", err)
+			return false, "", -1, fmt.Errorf("non-stream parse error: %w", err)
 		}
 		answer := parsed.Choices[0].Message.Content
-		return false, answer, nil
+		return false, answer, -1, nil
 	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		return false, "", errors.New("response writer does not support flushing")
+		return false, "", -1, errors.New("response writer does not support flushing")
+	}
+
+	messageID := int64(-1)
+	if store != nil && store.db != nil {
+		reservedID, reserveErr := store.createMessage(payload.ConversationID, "llm", "")
+		if reserveErr != nil {
+			logConsolef("stream reserve message failed: %v", reserveErr)
+		} else {
+			messageID = reservedID
+			w.Header().Set("X-Message-Id", strconv.FormatInt(messageID, 10))
+		}
 	}
 
 	w.Header().Set("X-Conversation-Id", strconv.FormatInt(payload.ConversationID, 10))
@@ -239,13 +251,13 @@ func streamUpstream(ctx context.Context, baseURL, apiKey string, payload ChatReq
 	for {
 		select {
 		case <-ctx.Done():
-			return true, fullText.String(), ctx.Err()
+			return true, fullText.String(), messageID, ctx.Err()
 		default:
 		}
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
 			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-				return true, fullText.String(), writeErr
+				return true, fullText.String(), messageID, writeErr
 			}
 			flusher.Flush()
 
@@ -281,9 +293,9 @@ func streamUpstream(ctx context.Context, baseURL, apiKey string, payload ChatReq
 		}
 		if readErr != nil {
 			if readErr == io.EOF {
-				return true, fullText.String(), nil
+				return true, fullText.String(), messageID, nil
 			}
-			return true, fullText.String(), readErr
+			return true, fullText.String(), messageID, readErr
 		}
 	}
 }
@@ -561,6 +573,27 @@ func (s *loginStore) createMessage(conversationID int64, roll, context string) (
 	return 0, errors.New("unable to allocate message_id")
 }
 
+func (s *loginStore) updateMessageContext(conversationID, messageID int64, context string) error {
+	if s == nil || s.db == nil {
+		return errors.New("login store not initialized")
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := s.db.Exec(
+		`UPDATE message SET context = ?, time = ? WHERE message_id = ?`,
+		context,
+		now,
+		messageID,
+	); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(
+		`UPDATE conversation SET last_edit_time = ? WHERE conversation_id = ?`,
+		now,
+		conversationID,
+	)
+	return err
+}
+
 func isConstraintError(err error) bool {
 	if err == nil {
 		return false
@@ -749,7 +782,109 @@ func handleBack(store *loginStore) http.Handler {
 			return
 		}
 
-		// TODO: implement back logic.
+		tx, err := store.db.Begin()
+		if err != nil {
+			logConsolef("back begin failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "db_error",
+			})
+			return
+		}
+		defer func() {
+			if err != nil {
+				_ = tx.Rollback()
+			}
+		}()
+
+		var conversationID int64
+		var messageTime string
+		err = tx.QueryRow(
+			`SELECT conversation_id, time FROM message WHERE message_id = ? LIMIT 1`,
+			payload.MessageID,
+		).Scan(&conversationID, &messageTime)
+		if err != nil {
+			logConsolef("back message lookup failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "message_not_found",
+			})
+			return
+		}
+
+		var ownerID int64
+		err = tx.QueryRow(
+			`SELECT user_id FROM conversation WHERE conversation_id = ? LIMIT 1`,
+			conversationID,
+		).Scan(&ownerID)
+		if err != nil {
+			logConsolef("back conversation lookup failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "conversation_not_found",
+			})
+			return
+		}
+		if ownerID != payload.UserID {
+			logConsolef("back user mismatch: message_id=%d conversation_id=%d user_id=%d", payload.MessageID, conversationID, payload.UserID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "user_mismatch",
+			})
+			return
+		}
+
+		_, err = tx.Exec(
+			`DELETE FROM files WHERE message_id IN (
+       SELECT message_id FROM message
+       WHERE conversation_id = ? AND (time > ? OR (time = ? AND message_id > ?))
+     )`,
+			conversationID,
+			messageTime,
+			messageTime,
+			payload.MessageID,
+		)
+		if err != nil {
+			logConsolef("back delete files failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "db_error",
+			})
+			return
+		}
+
+		_, err = tx.Exec(
+			`DELETE FROM message
+       WHERE conversation_id = ? AND (time > ? OR (time = ? AND message_id > ?))`,
+			conversationID,
+			messageTime,
+			messageTime,
+			payload.MessageID,
+		)
+		if err != nil {
+			logConsolef("back delete messages failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "db_error",
+			})
+			return
+		}
+
+		_, err = tx.Exec(
+			`UPDATE conversation SET last_edit_time = ? WHERE conversation_id = ?`,
+			messageTime,
+			conversationID,
+		)
+		if err != nil {
+			logConsolef("back update conversation failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "db_error",
+			})
+			return
+		}
+
+		if err = tx.Commit(); err != nil {
+			logConsolef("back commit failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "db_error",
+			})
+			return
+		}
+
 		writeJSON(w, http.StatusOK, backResponse{OK: true})
 	})
 }
@@ -824,13 +959,17 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 		}
 
 		// 1) 尝试流式输出（或自动回退并已写入 JSON）
-		streamed, streamAnswer, streamErr := streamUpstream(r.Context(), baseURL, apiKey, payload, store, w)
+		streamed, streamAnswer, streamMessageID, streamErr := streamUpstream(r.Context(), baseURL, apiKey, payload, store, w)
 		if streamed {
 			if streamErr != nil && !errors.Is(streamErr, context.Canceled) {
 				logConsolef("stream error after headers: %v", streamErr)
 			}
 			if streamAnswer != "" {
-				if _, err := store.createMessage(payload.ConversationID, "llm", streamAnswer); err != nil {
+				if streamMessageID >= 0 {
+					if err := store.updateMessageContext(payload.ConversationID, streamMessageID, streamAnswer); err != nil {
+						logConsolef("update llm message failed: %v", err)
+					}
+				} else if _, err := store.createMessage(payload.ConversationID, "llm", streamAnswer); err != nil {
 					logConsolef("insert llm message failed: %v", err)
 				}
 			}
@@ -838,14 +977,15 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 		}
 		// streamed=false 且 err==nil 表示 streamUpstream 已成功写入 JSON 响应
 		if streamErr == nil {
-			if _, err := store.createMessage(payload.ConversationID, "llm", streamAnswer); err != nil {
+			messageID, err := store.createMessage(payload.ConversationID, "llm", streamAnswer)
+			if err != nil {
 				logConsolef("insert llm message failed: %v", err)
 				writeJSON(w, http.StatusInternalServerError, map[string]string{
 					"error": "db_error",
 				})
 				return
 			}
-			response := ChatResponse{Answer: streamAnswer, Model: "deepseek-v4-flash", ConversationID: payload.ConversationID}
+			response := ChatResponse{Answer: streamAnswer, Model: "deepseek-v4-flash", ConversationID: payload.ConversationID, MessageID: messageID}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(response)
 			return
@@ -868,7 +1008,8 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 			_, _ = w.Write([]byte(fmt.Sprintf(`{"error":"upstream_error","message":"%s"}`, err.Error())))
 			return
 		}
-		if _, err := store.createMessage(payload.ConversationID, "llm", answer); err != nil {
+		messageID, err := store.createMessage(payload.ConversationID, "llm", answer)
+		if err != nil {
 			logConsolef("insert llm message failed: %v", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{
 				"error": "db_error",
@@ -876,7 +1017,7 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 			return
 		}
 
-		response := ChatResponse{Answer: answer, Model: "deepseek-v4-flash", ConversationID: payload.ConversationID}
+		response := ChatResponse{Answer: answer, Model: "deepseek-v4-flash", ConversationID: payload.ConversationID, MessageID: messageID}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)
 	})

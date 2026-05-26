@@ -46,14 +46,14 @@
 ```
 - 期望响应字段：
 ```json
-{"answer":"<string>","conversationId":123}
+{"answer":"<string>","conversationId":123,"messageId":456}
 ```
 - 说明：
   - 新对话时 `conversationId=-1`，后端会分配新的 `conversationId`
 
 ### POST /back
-- 用途：回溯到指定消息（接口预留）
-- 后端实现情况：已实现占位（路由见 [backend/main.go](backend/main.go)，处理见 [backend/chat_handlers.go](backend/chat_handlers.go)）
+- 用途：回溯到指定消息，删除该消息之后的记录并更新会话时间
+- 后端实现情况：已实现（路由见 [backend/main.go](backend/main.go)，处理见 [backend/chat_handlers.go](backend/chat_handlers.go)）
 - 调用位置：主聊天页（[frontend/src/events.js](frontend/src/events.js)）
 - 请求体：
 ```json
@@ -64,7 +64,7 @@
 {"ok":true}
 ```
 - 说明：
-  - 当前仅占位，实际回溯逻辑待实现
+  - 后端会校验 `messageId` 所属会话与 `userId` 是否匹配，不匹配时返回 500
 
 ### POST /history
 - 用途：获取历史会话列表
