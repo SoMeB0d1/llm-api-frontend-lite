@@ -52,7 +52,6 @@ function renderMessage(role, content, messageId) {
       "resources/back.svg",
       "Rewind response"
     );
-    retryBtn.dataset.action = "regenerate";
     backBtn.dataset.action = "back";
     actions.append(retryBtn, backBtn);
   }
