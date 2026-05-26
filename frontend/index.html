@@ -148,6 +148,16 @@
       </div>
     </div>
 
+    <div class="modal" id="regenerateModal" hidden>
+      <div class="modal-card modal-card--confirm" role="dialog" aria-modal="true" aria-labelledby="regenerateModalTitle">
+        <h2 class="modal-title" id="regenerateModalTitle">是否重新生成本消息？此后对话历史将舍弃！</h2>
+        <div class="modal-actions">
+          <button class="danger-button" id="regenerateConfirmBtn" type="button">确认</button>
+          <button class="ghost-button" id="regenerateCancelBtn" type="button">取消</button>
+        </div>
+      </div>
+    </div>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js"></script>

@@ -511,6 +511,13 @@ body {
   border-color: transparent;
 }
 
+.chat-history[data-actions-disabled="true"] .action-button[data-action="back"],
+.chat-history[data-actions-disabled="true"] .action-button[data-action="regenerate"] {
+  pointer-events: none;
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .chat-input {
   border-top: 1px solid var(--border);
   padding: 16px 20px 20px;

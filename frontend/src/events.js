@@ -26,6 +26,81 @@ import { renderMarkdown } from "./markdown.js";
 
 function initEvents() {
   let pendingBackMessageId = null;
+  let pendingRegeneratePrompt = "";
+  let pendingRegenerateBackMessageId = null;
+
+  const findPreviousMessage = (startNode, selector) => {
+    let current = startNode?.previousElementSibling;
+    while (current) {
+      if (current.matches(selector)) {
+        return current;
+      }
+      current = current.previousElementSibling;
+    }
+    return null;
+  };
+
+  const sendPromptFromUI = async (prompt) => {
+    const trimmed = String(prompt || "").trim();
+    if (!trimmed) {
+      showToast("输入内容不能为空");
+      return;
+    }
+    if (state.isNewChat) {
+      setNewChatState(false);
+    }
+    setSendButtonState(true);
+    renderMessage("user", trimmed);
+    if (elements.promptInput) {
+      elements.promptInput.value = "";
+    }
+    const placeholder = renderMessage("assistant", "...");
+    try {
+      const answer = await sendMessage(trimmed, placeholder);
+      if (placeholder.dataset.raw === answer) {
+        if (window.renderMathInElement) {
+          window.renderMathInElement(placeholder, {
+            delimiters: [
+              { left: "$$", right: "$$", display: true },
+              { left: "$", right: "$", display: false },
+            ],
+          });
+        }
+      } else {
+        placeholder.innerHTML = renderMarkdown(answer);
+        placeholder.dataset.raw = answer;
+        const placeholderWrapper = placeholder.closest(".message");
+        if (placeholderWrapper) {
+          placeholderWrapper.dataset.raw = answer;
+        }
+        if (window.renderMathInElement) {
+          window.renderMathInElement(placeholder, {
+            delimiters: [
+              { left: "$$", right: "$$", display: true },
+              { left: "$", right: "$", display: false },
+            ],
+          });
+        }
+      }
+    } catch (error) {
+      placeholder.textContent = "Request failed.";
+      setStatus("Request failed");
+    } finally {
+      setSendButtonState(false);
+    }
+  };
+
+  const setActionButtonsDisabled = (disabled) => {
+    if (elements.chatHistory) {
+      elements.chatHistory.dataset.actionsDisabled = disabled ? "true" : "";
+    }
+    const buttons = document.querySelectorAll(
+      '.action-button[data-action="back"], .action-button[data-action="regenerate"]'
+    );
+    buttons.forEach((button) => {
+      button.disabled = disabled;
+    });
+  };
 
   const closeBackModal = () => {
     pendingBackMessageId = null;
@@ -41,6 +116,24 @@ function initEvents() {
       elements.backModal.dataset.messageId = String(messageId);
     }
     toggleModal(elements.backModal, true);
+  };
+
+  const closeRegenerateModal = () => {
+    pendingRegeneratePrompt = "";
+    pendingRegenerateBackMessageId = null;
+    if (elements.regenerateModal) {
+      elements.regenerateModal.dataset.messageId = "";
+    }
+    toggleModal(elements.regenerateModal, false);
+  };
+
+  const openRegenerateModal = (prompt, backMessageId) => {
+    pendingRegeneratePrompt = prompt;
+    pendingRegenerateBackMessageId = backMessageId;
+    if (elements.regenerateModal) {
+      elements.regenerateModal.dataset.messageId = String(backMessageId);
+    }
+    toggleModal(elements.regenerateModal, true);
   };
   if (elements.menuBtn) {
     elements.menuBtn.addEventListener("click", (event) => {
@@ -111,9 +204,23 @@ function initEvents() {
     });
   }
 
+  if (elements.regenerateModal) {
+    elements.regenerateModal.addEventListener("click", (event) => {
+      if (event.target === elements.regenerateModal) {
+        closeRegenerateModal();
+      }
+    });
+  }
+
   if (elements.backCancelBtn) {
     elements.backCancelBtn.addEventListener("click", () => {
       closeBackModal();
+    });
+  }
+
+  if (elements.regenerateCancelBtn) {
+    elements.regenerateCancelBtn.addEventListener("click", () => {
+      closeRegenerateModal();
     });
   }
 
@@ -128,6 +235,8 @@ function initEvents() {
         closeBackModal();
         return;
       }
+      closeBackModal();
+      setActionButtonsDisabled(true);
       try {
         await sendBack(messageId);
         if (Number.isFinite(state.conversationId) && state.conversationId >= 0) {
@@ -139,7 +248,38 @@ function initEvents() {
           showToast("回溯请求失败");
         }
       } finally {
-        closeBackModal();
+        setActionButtonsDisabled(false);
+      }
+    });
+  }
+
+  if (elements.regenerateConfirmBtn) {
+    elements.regenerateConfirmBtn.addEventListener("click", async () => {
+      const messageId = Number(pendingRegenerateBackMessageId);
+      const prompt = String(pendingRegeneratePrompt || "").trim();
+      if (!Number.isFinite(messageId) || !prompt) {
+        showToast("无法重新生成该消息");
+        closeRegenerateModal();
+        return;
+      }
+      closeRegenerateModal();
+      setActionButtonsDisabled(true);
+      try {
+        await sendBack(messageId);
+        if (Number.isFinite(state.conversationId) && state.conversationId >= 0) {
+          await loadConversation(state.conversationId);
+        }
+        if (elements.promptInput) {
+          elements.promptInput.value = prompt;
+        }
+        await sendPromptFromUI(prompt);
+        showToast("已提交重新生成请求", "success");
+      } catch (error) {
+        if (error?.message !== "server_error") {
+          showToast("重新生成请求失败");
+        }
+      } finally {
+        setActionButtonsDisabled(false);
       }
     });
   }
@@ -188,6 +328,26 @@ function initEvents() {
 
   if (elements.chatHistory) {
     elements.chatHistory.addEventListener("click", (event) => {
+      const regenerateButton = event.target.closest(
+        '.action-button[data-action="regenerate"]'
+      );
+      if (regenerateButton) {
+        const messageNode = regenerateButton.closest(".message");
+        const previousUser = findPreviousMessage(messageNode, ".message.user");
+        const previousAssistant = findPreviousMessage(
+          messageNode,
+          ".message.assistant"
+        );
+        const prompt = String(previousUser?.dataset.raw || "").trim();
+        const backMessageId = Number(previousAssistant?.dataset.messageId);
+        if (!prompt || !Number.isFinite(backMessageId)) {
+          showToast("无法重新生成该消息");
+          return;
+        }
+        openRegenerateModal(prompt, backMessageId);
+        return;
+      }
+
       const backButton = event.target.closest(
         '.action-button[data-action="back"]'
       );
@@ -255,51 +415,8 @@ function initEvents() {
   if (elements.chatForm) {
     elements.chatForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const prompt = elements.promptInput.value.trim();
-      if (!prompt) {
-        showToast("输入内容不能为空");
-        return;
-      }
-      if (state.isNewChat) {
-        setNewChatState(false);
-      }
-      setSendButtonState(true);
-      renderMessage("user", prompt);
-      elements.promptInput.value = "";
-      const placeholder = renderMessage("assistant", "...");
-      try {
-        const answer = await sendMessage(prompt, placeholder);
-        if (placeholder.dataset.raw === answer) {
-          if (window.renderMathInElement) {
-            window.renderMathInElement(placeholder, {
-              delimiters: [
-                { left: "$$", right: "$$", display: true },
-                { left: "$", right: "$", display: false },
-              ],
-            });
-          }
-        } else {
-          placeholder.innerHTML = renderMarkdown(answer);
-          placeholder.dataset.raw = answer;
-          const placeholderWrapper = placeholder.closest(".message");
-          if (placeholderWrapper) {
-            placeholderWrapper.dataset.raw = answer;
-          }
-          if (window.renderMathInElement) {
-            window.renderMathInElement(placeholder, {
-              delimiters: [
-                { left: "$$", right: "$$", display: true },
-                { left: "$", right: "$", display: false },
-              ],
-            });
-          }
-        }
-      } catch (error) {
-        placeholder.textContent = "Request failed.";
-        setStatus("Request failed");
-      } finally {
-        setSendButtonState(false);
-      }
+      const prompt = elements.promptInput.value;
+      await sendPromptFromUI(prompt);
     });
   }
 

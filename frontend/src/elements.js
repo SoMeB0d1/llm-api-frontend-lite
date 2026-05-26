@@ -31,6 +31,9 @@ const elements = {
   backModal: document.getElementById("backModal"),
   backConfirmBtn: document.getElementById("backConfirmBtn"),
   backCancelBtn: document.getElementById("backCancelBtn"),
+  regenerateModal: document.getElementById("regenerateModal"),
+  regenerateConfirmBtn: document.getElementById("regenerateConfirmBtn"),
+  regenerateCancelBtn: document.getElementById("regenerateCancelBtn"),
 };
 
 export { elements };
