@@ -146,12 +146,11 @@ body {
 .login-shell {
   position: relative;
   z-index: 1;
-  height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(320px, 420px) 1fr;
-  gap: 32px;
-  padding: 28px 36px;
+  min-height: 100vh;
+  display: flex;
   align-items: center;
+  justify-content: center;
+  padding: 28px 36px;
 }
 
 .login-card {
@@ -162,6 +161,10 @@ body {
   padding: 28px;
   display: grid;
   gap: 16px;
+}
+
+.login-card--single {
+  width: min(360px, 92vw);
 }
 
 .login-title {
