@@ -20,10 +20,14 @@ function createActionButton(icon, label, onClick) {
   return button;
 }
 
-function renderMessage(role, content) {
+function renderMessage(role, content, messageId) {
   const wrapper = document.createElement("div");
   wrapper.className = `message ${role}`;
   wrapper.dataset.raw = content;
+  const numericMessageId = Number(messageId);
+  if (Number.isFinite(numericMessageId)) {
+    wrapper.dataset.messageId = String(numericMessageId);
+  }
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   const isUser = role === "user";
@@ -48,6 +52,7 @@ function renderMessage(role, content) {
       "resources/back.svg",
       "Rewind response"
     );
+    backBtn.dataset.action = "back";
     actions.append(retryBtn, backBtn);
   }
   const copyBtn = createActionButton(

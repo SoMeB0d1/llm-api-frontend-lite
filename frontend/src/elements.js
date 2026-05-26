@@ -28,6 +28,9 @@ const elements = {
   settingsForm: document.getElementById("settingsForm"),
   apiBaseUrl: document.getElementById("apiBaseUrl"),
   clearCacheBtn: document.getElementById("clearCacheBtn"),
+  backModal: document.getElementById("backModal"),
+  backConfirmBtn: document.getElementById("backConfirmBtn"),
+  backCancelBtn: document.getElementById("backCancelBtn"),
 };
 
 export { elements };

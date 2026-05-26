@@ -51,6 +51,21 @@
 - 说明：
   - 新对话时 `conversationId=-1`，后端会分配新的 `conversationId`
 
+### POST /back
+- 用途：回溯到指定消息（接口预留）
+- 后端实现情况：已实现占位（路由见 [backend/main.go](backend/main.go)，处理见 [backend/chat_handlers.go](backend/chat_handlers.go)）
+- 调用位置：主聊天页（[frontend/src/events.js](frontend/src/events.js)）
+- 请求体：
+```json
+{"userId":<number>,"messageId":<number>}
+```
+- 期望响应字段：
+```json
+{"ok":true}
+```
+- 说明：
+  - 当前仅占位，实际回溯逻辑待实现
+
 ### POST /history
 - 用途：获取历史会话列表
 - 后端实现情况：已实现（路由见 [backend/main.go](backend/main.go)，处理见 [backend/history.go](backend/history.go)）

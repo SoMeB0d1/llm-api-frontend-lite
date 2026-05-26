@@ -21,10 +21,27 @@ import {
   toggleModal,
 } from "./ui.js";
 import { renderMessage, resetChat } from "./message.js";
-import { fetchModelsIfAllowed, sendMessage } from "./api.js";
+import { fetchModelsIfAllowed, sendMessage, sendBack } from "./api.js";
 import { renderMarkdown } from "./markdown.js";
 
 function initEvents() {
+  let pendingBackMessageId = null;
+
+  const closeBackModal = () => {
+    pendingBackMessageId = null;
+    if (elements.backModal) {
+      elements.backModal.dataset.messageId = "";
+    }
+    toggleModal(elements.backModal, false);
+  };
+
+  const openBackModal = (messageId) => {
+    pendingBackMessageId = messageId;
+    if (elements.backModal) {
+      elements.backModal.dataset.messageId = String(messageId);
+    }
+    toggleModal(elements.backModal, true);
+  };
   if (elements.menuBtn) {
     elements.menuBtn.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -86,6 +103,44 @@ function initEvents() {
     });
   }
 
+  if (elements.backModal) {
+    elements.backModal.addEventListener("click", (event) => {
+      if (event.target === elements.backModal) {
+        closeBackModal();
+      }
+    });
+  }
+
+  if (elements.backCancelBtn) {
+    elements.backCancelBtn.addEventListener("click", () => {
+      closeBackModal();
+    });
+  }
+
+  if (elements.backConfirmBtn) {
+    elements.backConfirmBtn.addEventListener("click", async () => {
+      const modalMessageId = Number(elements.backModal?.dataset.messageId);
+      const messageId = Number.isFinite(pendingBackMessageId)
+        ? pendingBackMessageId
+        : modalMessageId;
+      if (!Number.isFinite(messageId)) {
+        showToast("无法回溯该消息");
+        closeBackModal();
+        return;
+      }
+      try {
+        await sendBack(messageId);
+        showToast("已提交回溯请求", "success");
+      } catch (error) {
+        if (error?.message !== "server_error") {
+          showToast("回溯请求失败");
+        }
+      } finally {
+        closeBackModal();
+      }
+    });
+  }
+
   if (elements.newChatBtn) {
     elements.newChatBtn.addEventListener("click", () => {
       resetChat();
@@ -130,6 +185,20 @@ function initEvents() {
 
   if (elements.chatHistory) {
     elements.chatHistory.addEventListener("click", (event) => {
+      const backButton = event.target.closest(
+        '.action-button[data-action="back"]'
+      );
+      if (backButton) {
+        const messageNode = backButton.closest(".message");
+        const messageId = Number(messageNode?.dataset.messageId);
+        if (!Number.isFinite(messageId)) {
+          showToast("无法回溯该消息");
+          return;
+        }
+        openBackModal(messageId);
+        return;
+      }
+
       const target = event.target.closest(".code-copy");
       if (!target) {
         return;

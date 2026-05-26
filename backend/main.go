@@ -143,6 +143,7 @@ func main() {
 	mux.Handle("/title", withCORS(handleTitle(upstreamBase, apiKey, titleModel, store)))
 	mux.Handle("/history", withCORS(handleHistory(store)))
 	mux.Handle("/history/topic", withCORS(handleHistoryTopic(store)))
+	mux.Handle("/back", withCORS(handleBack(store)))
 	mux.Handle("/auth/login", withCORS(handleAuthLogin(store)))
 	mux.Handle("/auth/token", withCORS(handleAuthToken(store)))
 	mux.Handle("/v1/", withCORS(proxy))

@@ -138,6 +138,16 @@
       </div>
     </div>
 
+    <div class="modal" id="backModal" hidden>
+      <div class="modal-card modal-card--confirm" role="dialog" aria-modal="true" aria-labelledby="backModalTitle">
+        <h2 class="modal-title" id="backModalTitle">是否回溯至对话？</h2>
+        <div class="modal-actions">
+          <button class="danger-button" id="backConfirmBtn" type="button">确认</button>
+          <button class="ghost-button" id="backCancelBtn" type="button">取消</button>
+        </div>
+      </div>
+    </div>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js"></script>

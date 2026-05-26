@@ -284,7 +284,7 @@ async function loadConversation(conversationId) {
     }
     data.messages.forEach((msg) => {
       const role = msg.roll === "llm" ? "assistant" : "user";
-      renderMessage(role, msg.context || "");
+      renderMessage(role, msg.context || "", msg.message_id);
     });
     const resolvedConversationId = Number(conversationId);
     state.conversationId = Number.isFinite(resolvedConversationId)
@@ -423,6 +423,16 @@ async function sendMessage(prompt, placeholder) {
   return response.answer || "(no response)";
 }
 
+async function sendBack(messageId) {
+  return apiFetch("/back", {
+    method: "POST",
+    body: JSON.stringify({
+      userId: state.userId,
+      messageId,
+    }),
+  });
+}
+
 export {
   apiFetch,
   fetchModelsIfAllowed,
@@ -430,4 +440,5 @@ export {
   loadHistory,
   loadConversation,
   sendMessage,
+  sendBack,
 };
