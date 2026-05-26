@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="500" height="500">
+  <!-- 主圆弧：截去 247.5° 到 270° -->
+  <path d="M 250 150
+           A 100 100 0 0 1 150 250
+           M 111.732 242.388
+           A 100 100 0 1 1 250 150" 
+        fill="none" 
+        stroke="black" 
+        stroke-width="10" 
+        stroke-linecap="round" />
+        
+  <!-- 270度端点处线段：斜向右上45度（长度缩短一半） -->
+  <line x1="150" y1="250" x2="167.678" y2="232.322" stroke="black" stroke-width="10" stroke-linecap="round" />
+  
+  <!-- 270度端点处线段：斜向右下45度（长度缩短一半） -->
+  <line x1="150" y1="250" x2="167.678" y2="267.678" stroke="black" stroke-width="10" stroke-linecap="round" />
+</svg>

@@ -39,6 +39,17 @@ function renderMessage(role, content) {
   meta.textContent = role === "user" ? "You" : "Assistant";
   const actions = document.createElement("div");
   actions.className = "message-actions";
+  if (!isUser) {
+    const retryBtn = createActionButton(
+      "resources/retry.svg",
+      "Retry response"
+    );
+    const backBtn = createActionButton(
+      "resources/back.svg",
+      "Rewind response"
+    );
+    actions.append(retryBtn, backBtn);
+  }
   const copyBtn = createActionButton(
     "resources/copy.svg",
     "Copy message",
