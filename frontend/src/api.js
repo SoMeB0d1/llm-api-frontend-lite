@@ -454,6 +454,16 @@ async function sendBack(messageId) {
   });
 }
 
+async function sendRegenerate(messageId) {
+  return apiFetch("/regenerate", {
+    method: "POST",
+    body: JSON.stringify({
+      userId: state.userId,
+      messageId,
+    }),
+  });
+}
+
 export {
   apiFetch,
   fetchModelsIfAllowed,
@@ -462,4 +472,5 @@ export {
   loadConversation,
   sendMessage,
   sendBack,
+  sendRegenerate,
 };

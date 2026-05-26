@@ -21,11 +21,12 @@ import {
   toggleModal,
 } from "./ui.js";
 import { renderMessage, resetChat } from "./message.js";
-import { fetchModelsIfAllowed, loadConversation, sendMessage, sendBack } from "./api.js";
+import { fetchModelsIfAllowed, loadConversation, sendMessage, sendBack, sendRegenerate } from "./api.js";
 import { renderMarkdown } from "./markdown.js";
 
 function initEvents() {
   let pendingBackMessageId = null;
+  let pendingRegenerateMessageId = null;
 
   const closeBackModal = () => {
     pendingBackMessageId = null;
@@ -41,6 +42,22 @@ function initEvents() {
       elements.backModal.dataset.messageId = String(messageId);
     }
     toggleModal(elements.backModal, true);
+  };
+
+  const closeRegenerateModal = () => {
+    pendingRegenerateMessageId = null;
+    if (elements.regenerateModal) {
+      elements.regenerateModal.dataset.messageId = "";
+    }
+    toggleModal(elements.regenerateModal, false);
+  };
+
+  const openRegenerateModal = (messageId) => {
+    pendingRegenerateMessageId = messageId;
+    if (elements.regenerateModal) {
+      elements.regenerateModal.dataset.messageId = String(messageId);
+    }
+    toggleModal(elements.regenerateModal, true);
   };
   if (elements.menuBtn) {
     elements.menuBtn.addEventListener("click", (event) => {
@@ -111,9 +128,23 @@ function initEvents() {
     });
   }
 
+  if (elements.regenerateModal) {
+    elements.regenerateModal.addEventListener("click", (event) => {
+      if (event.target === elements.regenerateModal) {
+        closeRegenerateModal();
+      }
+    });
+  }
+
   if (elements.backCancelBtn) {
     elements.backCancelBtn.addEventListener("click", () => {
       closeBackModal();
+    });
+  }
+
+  if (elements.regenerateCancelBtn) {
+    elements.regenerateCancelBtn.addEventListener("click", () => {
+      closeRegenerateModal();
     });
   }
 
@@ -140,6 +171,39 @@ function initEvents() {
         }
       } finally {
         closeBackModal();
+      }
+    });
+  }
+
+  if (elements.regenerateConfirmBtn) {
+    elements.regenerateConfirmBtn.addEventListener("click", async () => {
+      const modalMessageId = Number(elements.regenerateModal?.dataset.messageId);
+      const messageId = Number.isFinite(pendingRegenerateMessageId)
+        ? pendingRegenerateMessageId
+        : modalMessageId;
+      if (!Number.isFinite(messageId)) {
+        showToast("无法重新生成该消息");
+        closeRegenerateModal();
+        return;
+      }
+      try {
+        const response = await sendRegenerate(messageId);
+        const nextConversationId = Number(response?.conversationId);
+        if (Number.isFinite(nextConversationId) && nextConversationId >= 0) {
+          await loadConversation(nextConversationId);
+        } else if (
+          Number.isFinite(state.conversationId) &&
+          state.conversationId >= 0
+        ) {
+          await loadConversation(state.conversationId);
+        }
+        showToast("已提交重新生成请求", "success");
+      } catch (error) {
+        if (error?.message !== "server_error") {
+          showToast("重新生成请求失败");
+        }
+      } finally {
+        closeRegenerateModal();
       }
     });
   }
@@ -188,6 +252,20 @@ function initEvents() {
 
   if (elements.chatHistory) {
     elements.chatHistory.addEventListener("click", (event) => {
+      const regenerateButton = event.target.closest(
+        '.action-button[data-action="regenerate"]'
+      );
+      if (regenerateButton) {
+        const messageNode = regenerateButton.closest(".message");
+        const messageId = Number(messageNode?.dataset.messageId);
+        if (!Number.isFinite(messageId)) {
+          showToast("无法重新生成该消息");
+          return;
+        }
+        openRegenerateModal(messageId);
+        return;
+      }
+
       const backButton = event.target.closest(
         '.action-button[data-action="back"]'
       );

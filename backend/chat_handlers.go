@@ -621,6 +621,11 @@ type backResponse struct {
 	OK bool `json:"ok"`
 }
 
+type regenerateRequest struct {
+	UserID    int64 `json:"userId"`
+	MessageID int64 `json:"messageId"`
+}
+
 func callTitleUpstream(ctx context.Context, baseURL, apiKey, model, text string) (string, error) {
 	if strings.TrimSpace(model) == "" {
 		return "", errors.New("title_model_missing")
@@ -886,6 +891,43 @@ func handleBack(store *loginStore) http.Handler {
 		}
 
 		writeJSON(w, http.StatusOK, backResponse{OK: true})
+	})
+}
+
+func handleRegenerate(store *loginStore) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if store == nil || store.db == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+				"error": "login_store_unavailable",
+			})
+			return
+		}
+
+		var payload regenerateRequest
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "invalid_json",
+			})
+			return
+		}
+		if payload.UserID < 0 || payload.MessageID < 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "invalid_payload",
+			})
+			return
+		}
+
+		// TODO: implement regenerate logic.
+		writeJSON(w, http.StatusOK, ChatResponse{
+			Answer:         "",
+			Model:          "deepseek-v4-flash",
+			ConversationID: -1,
+			MessageID:      payload.MessageID,
+		})
 	})
 }
 
