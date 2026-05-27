@@ -39,22 +39,48 @@
 ### POST /chat
 - 用途：发送对话消息
 - 后端实现情况：已实现（路由见 [backend/main.go](backend/main.go)，处理见 [backend/chat_handlers.go](backend/chat_handlers.go)）
-- 调用位置：主聊天页（[frontend/src/app.js](frontend/src/app.js)）
+- 调用位置：主聊天页（[frontend/src/api.js](frontend/src/api.js) 中 `fetchStream` 和 `sendMessage`）
 - 请求体：
 ```json
-{"userId":<number>,"conversationId":-1,"model":"<string>","message":"<string>"}
+{
+  "userId":<number>,
+  "conversationId":<number>,
+  "model":"<string>",
+  "message":"<string>",
+  "prompt":"<string>"  // 可选，仅新对话（conversationId==-1）时附带
+}
 ```
-- 期望响应字段：
+- 响应（非流式 JSON）：
 ```json
-{"answer":"<string>","conversationId":123,"messageId":456}
+{
+  "answer":"<string>",
+  "model":"<string>",
+  "conversationId":<number>,
+  "messageId":<number>,
+  "userMessageId":<number>
+}
 ```
 - 说明：
-  - 新对话时 `conversationId=-1`，后端会分配新的 `conversationId`
+  - 新对话时 `conversationId=-1`，后端会在 DB 中创建 conversation 并分配新的 `conversationId`
+  - `prompt` 字段仅新对话时使用，作为 system prompt 存入 conversation 表
+  - 后端优先尝试流式（SSE）响应，失败时自动回退到 JSON 响应
+  - 流式响应头：
+    - `X-Conversation-Id`: 会话 ID
+    - `X-Message-Id`: LLM 回复的 message_id
+    - `X-User-Message-Id`: 用户消息的 message_id
+    - `Content-Type: text/event-stream`
+  - 流式 SSE 数据格式遵循 OpenAI 标准：`data: {"choices":[{"delta":{"content":"..."}}]}`，结束标志 `data: [DONE]`
+  - 前端收到流式头后：
+    - 用 `X-Conversation-Id` 更新 `state.conversationId`
+    - 用 `X-Message-Id` 设置 LLM 消息元素的 `data-message-id`
+    - 用 `X-User-Message-Id` 设置用户消息元素的 `data-message-id`（查找前一个 `.message.user` 元素）
+  - 非流式回退时，前端同样从 JSON 响应中提取 `conversationId`、`messageId`、`userMessageId` 并设置对应的 DOM 属性
+  - 前端在收到错误响应时也会尝试提取 `conversationId`、`messageId`、`userMessageId`（若后端在错误 JSON 中返回了这些字段）
 
 ### POST /back
-- 用途：回溯到指定消息，删除该消息之后的记录并更新会话时间
+- 用途：回溯到指定消息，删除该消息时间**之后**（含同时刻但 message_id 更大）的所有消息及关联文件，并将 conversation 的 `last_edit_time` 回退到该消息的时间
 - 后端实现情况：已实现（路由见 [backend/main.go](backend/main.go)，处理见 [backend/chat_handlers.go](backend/chat_handlers.go)）
-- 调用位置：主聊天页（[frontend/src/events.js](frontend/src/events.js)）
+- 调用位置：主聊天页（[frontend/src/events.js](frontend/src/events.js) 和 [frontend/src/api.js](frontend/src/api.js) 中 `sendBack`）
 - 请求体：
 ```json
 {"userId":<number>,"messageId":<number>}
@@ -63,8 +89,24 @@
 ```json
 {"ok":true}
 ```
-- 说明：
-  - 后端会校验 `messageId` 所属会话与 `userId` 是否匹配，不匹配时返回 500
+- 后端处理细节：
+  - 通过 `message_id` 查询该消息的 `conversation_id` 和 `time`
+  - 校验 `conversation` 的 `user_id` 与请求中的 `userId` 是否匹配，不匹配返回 500 `{"error":"user_mismatch"}`
+  - 事务中依次删除：
+    1. `files` 表中 `message_id` 属于"该消息之后的 message"的记录
+    2. `message` 表中 `conversation_id` 相同且 `time > 消息时间` 或 `(time == 消息时间 AND message_id > 传入的 messageId)` 的记录（即 **不删除** 传入 messageId 对应的那条消息本身）
+    3. 更新 `conversation` 的 `last_edit_time` 为该消息的时间
+  - 消息不存在时返回 500 `{"error":"message_not_found"}`
+- 前端回溯逻辑：
+  - 用户在 UI 点击回溯按钮时：
+    1. 取按钮所在 `.message` 元素的 `data-message-id`
+    2. 若该消息无 id（如占位补齐的 llm 消息），向上查找最近的前一个 `.message.user` 元素的 `data-message-id`
+    3. 若仍未找到有效 id，提示"无法回溯该消息"
+  - 回溯成功后调用 `loadConversation` 重新加载当前会话，展示回溯后的消息列表
+  - 重新生成（regenerate）逻辑：
+    - 先调用 `/back` 回溯到上一条 llm（assistant）消息的 messageId
+    - 若上一条 llm 消息无 id（如占位补齐），按 back 按钮逻辑回退使用上一条 user 消息的 messageId
+    - 回溯成功后重新发送上一条 user 消息的内容（prompt）
 
 ### POST /history
 - 用途：获取历史会话列表
@@ -98,7 +140,10 @@
 ```
 - 前端处理：
   - 解析 `data.model` 同步到 `state.model` 并更新 `modelSelect` 下拉框
-  - 遍历 `data.messages` 逐条渲染消息
+  - 遍历 `data.messages` 逐条渲染消息，调用 `renderMessage(role, context, message_id)` 将 `message_id` 写入 DOM 元素的 `data-message-id` 属性（后续 `/back` 和 regenerate 操作依赖此属性获取 message id）
+  - 加载完成后设置 `state.conversationId` 为当前会话 ID 并标记 `isNewChat = false`
+  - 规范化规则：前端在渲染历史消息时会保证"每个 `user` 消息后面都有一条 `llm`（assistant）消息"。如果后端返回的消息序列中某个 `user` 消息后没有对应的 `llm` 消息，前端会在该处补上一条占位 `llm` 消息，内容为 `**Error**: Request not exist.`。补齐规则对对话末尾也生效（即最后一条是 user 时也会补齐）。补齐消息仅用于展示（没有 `message_id`，`data-message-id` 为空）
+  - `/history/topic` 后端 SQL 查询按 `message_id ASC` 排序，保证消息顺序
 - 错误处理：
   - 后端数据库查询失败时返回 500 `{ "error": "db_error" }`
   - 前端收到 500 后弹窗提示"出现问题，请联系管理员"

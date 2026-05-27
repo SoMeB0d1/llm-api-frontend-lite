@@ -50,13 +50,13 @@ function initEvents() {
       setNewChatState(false);
     }
     setSendButtonState(true);
-    renderMessage("user", trimmed);
+    const userBubble = renderMessage("user", trimmed);
     if (elements.promptInput) {
       elements.promptInput.value = "";
     }
     const placeholder = renderMessage("assistant", "...");
     try {
-      const answer = await sendMessage(trimmed, placeholder);
+      const answer = await sendMessage(trimmed, placeholder, userBubble);
       if (placeholder.dataset.raw === answer) {
         if (window.renderMathInElement) {
           window.renderMathInElement(placeholder, {
@@ -334,12 +334,19 @@ function initEvents() {
       if (regenerateButton) {
         const messageNode = regenerateButton.closest(".message");
         const previousUser = findPreviousMessage(messageNode, ".message.user");
+        const prompt = String(previousUser?.dataset.raw || "").trim();
+
+        // 取上一条 assistant 消息的 messageId 作为 /back 目标；
+        // 若 assistant 无 id（如占位补齐的消息），回退到上一条 user 消息的 id（按 back 按钮逻辑）
         const previousAssistant = findPreviousMessage(
           messageNode,
           ".message.assistant"
         );
-        const prompt = String(previousUser?.dataset.raw || "").trim();
-        const backMessageId = Number(previousAssistant?.dataset.messageId);
+        let backMessageId = Number(previousAssistant?.dataset.messageId);
+        if (!Number.isFinite(backMessageId)) {
+          backMessageId = Number(previousUser?.dataset.messageId);
+        }
+
         if (!prompt || !Number.isFinite(backMessageId)) {
           showToast("无法重新生成该消息");
           return;
@@ -353,10 +360,18 @@ function initEvents() {
       );
       if (backButton) {
         const messageNode = backButton.closest(".message");
-        const messageId = Number(messageNode?.dataset.messageId);
+        let messageId = Number(messageNode?.dataset.messageId);
         if (!Number.isFinite(messageId)) {
-          showToast("无法回溯该消息");
-          return;
+          // 当前消息无 id，向上查找最近的一个 user 消息的 id 作为回溯目标
+          const previousUser = findPreviousMessage(
+            messageNode,
+            ".message.user"
+          );
+          messageId = Number(previousUser?.dataset.messageId);
+          if (!Number.isFinite(messageId)) {
+            showToast("无法回溯该消息");
+            return;
+          }
         }
         openBackModal(messageId);
         return;

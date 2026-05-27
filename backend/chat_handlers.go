@@ -27,6 +27,7 @@ type ChatResponse struct {
 	Model          string `json:"model"`
 	ConversationID int64  `json:"conversationId"`
 	MessageID      int64  `json:"messageId"`
+	UserMessageID  int64  `json:"userMessageId"`
 }
 
 type upstreamMessage struct {
@@ -950,12 +951,19 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 			}
 		}
 
-		if _, err := store.createMessage(payload.ConversationID, "user", payload.Message); err != nil {
+		userMessageID := int64(-1)
+		var err error
+		userMessageID, err = store.createMessage(payload.ConversationID, "user", payload.Message)
+		if err != nil {
 			logConsolef("insert user message failed: %v", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{
 				"error": "db_error",
 			})
 			return
+		}
+		// expose the user's message id to the client via header for streaming responses
+		if userMessageID >= 0 {
+			w.Header().Set("X-User-Message-Id", strconv.FormatInt(userMessageID, 10))
 		}
 
 		// 1) 尝试流式输出（或自动回退并已写入 JSON）
@@ -985,7 +993,7 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 				})
 				return
 			}
-			response := ChatResponse{Answer: streamAnswer, Model: "deepseek-v4-flash", ConversationID: payload.ConversationID, MessageID: messageID}
+			response := ChatResponse{Answer: streamAnswer, Model: "deepseek-v4-flash", ConversationID: payload.ConversationID, MessageID: messageID, UserMessageID: userMessageID}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(response)
 			return
@@ -1004,8 +1012,20 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 				strings.Contains(errMsg, "login store not initialized") {
 				status = http.StatusInternalServerError
 			}
-			w.WriteHeader(status)
-			_, _ = w.Write([]byte(fmt.Sprintf(`{"error":"upstream_error","message":"%s"}`, err.Error())))
+			resp := map[string]interface{}{
+				"error":   "upstream_error",
+				"message": err.Error(),
+			}
+			if payload.ConversationID >= 0 {
+				resp["conversationId"] = payload.ConversationID
+			}
+			if streamMessageID >= 0 {
+				resp["messageId"] = streamMessageID
+			}
+			if userMessageID >= 0 {
+				resp["userMessageId"] = userMessageID
+			}
+			writeJSON(w, status, resp)
 			return
 		}
 		messageID, err := store.createMessage(payload.ConversationID, "llm", answer)
@@ -1017,7 +1037,7 @@ func handleChat(baseURL, apiKey string, store *loginStore) http.Handler {
 			return
 		}
 
-		response := ChatResponse{Answer: answer, Model: "deepseek-v4-flash", ConversationID: payload.ConversationID, MessageID: messageID}
+		response := ChatResponse{Answer: answer, Model: "deepseek-v4-flash", ConversationID: payload.ConversationID, MessageID: messageID, UserMessageID: userMessageID}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)
 	})

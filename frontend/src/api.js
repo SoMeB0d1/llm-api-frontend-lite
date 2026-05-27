@@ -84,12 +84,13 @@ async function apiFetch(path, options = {}) {
       throw new Error("server_error");
     }
     let message = `HTTP ${response.status}`;
+    let parsedJson = null;
     try {
       const text = await response.text();
       if (text) {
         try {
-          const data = JSON.parse(text);
-          message = data.message || data.error || message;
+          parsedJson = JSON.parse(text);
+          message = parsedJson.message || parsedJson.error || message;
         } catch (error) {
           message = text;
         }
@@ -98,7 +99,11 @@ async function apiFetch(path, options = {}) {
       // Keep default message.
     }
     showToast(`请求失败: ${message}`);
-    throw new Error(message);
+    const err = new Error(message);
+    if (parsedJson !== null) {
+      err.responseJson = parsedJson;
+    }
+    throw err;
   }
   return response.json();
 }
@@ -293,7 +298,21 @@ async function loadConversation(conversationId) {
       state.model = data.model;
       elements.modelSelect.value = data.model;
     }
-    data.messages.forEach((msg) => {
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+    const normalizedMessages = [];
+    for (let i = 0; i < messages.length; i += 1) {
+      const msg = messages[i];
+      normalizedMessages.push(msg);
+      if (msg && msg.roll === "user") {
+        const next = messages[i + 1];
+        if (!next || next.roll !== "llm") {
+          // Ensure each user message is followed by an assistant response.
+          normalizedMessages.push({ roll: "llm", context: "**Error**: Request not exist." });
+        }
+      }
+    }
+
+    normalizedMessages.forEach((msg) => {
       const role = msg.roll === "llm" ? "assistant" : "user";
       renderMessage(role, msg.context || "", msg.message_id);
     });
@@ -309,7 +328,7 @@ async function loadConversation(conversationId) {
   }
 }
 
-async function fetchStream(prompt, placeholder) {
+async function fetchStream(prompt, placeholder, userWrapper) {
   const timeoutMs = 120000;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -356,6 +375,34 @@ async function fetchStream(prompt, placeholder) {
   if (headerMessageId) {
     applyMessageIdToPlaceholder(placeholder, headerMessageId);
   }
+  const headerUserMessageId = response.headers.get("x-user-message-id");
+  if (headerUserMessageId) {
+    const parsed = Number(headerUserMessageId);
+    if (Number.isFinite(parsed)) {
+      // prefer explicit userWrapper passed by caller
+      if (userWrapper) {
+        const wrapperEl = userWrapper.closest && userWrapper.closest(".message") ? userWrapper.closest(".message") : userWrapper;
+        try {
+          if (wrapperEl) wrapperEl.dataset.messageId = String(parsed);
+        } catch (e) {
+          // ignore
+        }
+      } else if (placeholder) {
+        // fallback: find previous user message element before the assistant placeholder
+        const msgNode = placeholder.closest && placeholder.closest(".message") ? placeholder.closest(".message") : null;
+        if (msgNode) {
+          let prev = msgNode.previousElementSibling;
+          while (prev) {
+            if (prev.classList && prev.classList.contains && prev.classList.contains("message") && prev.classList.contains("user")) {
+              prev.dataset.messageId = String(parsed);
+              break;
+            }
+            prev = prev.previousElementSibling;
+          }
+        }
+      }
+    }
+  }
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.startsWith("text/event-stream")) {
     try {
@@ -365,6 +412,29 @@ async function fetchStream(prompt, placeholder) {
       }
       if (typeof json.messageId === "number") {
         applyMessageIdToPlaceholder(placeholder, json.messageId);
+      }
+      if (typeof json.userMessageId === "number") {
+        const parsed = Number(json.userMessageId);
+        if (Number.isFinite(parsed)) {
+          if (userWrapper) {
+            const wrapperEl = userWrapper.closest && userWrapper.closest(".message") ? userWrapper.closest(".message") : userWrapper;
+            try {
+              if (wrapperEl) wrapperEl.dataset.messageId = String(parsed);
+            } catch (e) {}
+          } else if (placeholder) {
+            const msgNode = placeholder.closest && placeholder.closest(".message") ? placeholder.closest(".message") : null;
+            if (msgNode) {
+              let prev = msgNode.previousElementSibling;
+              while (prev) {
+                if (prev.classList && prev.classList.contains && prev.classList.contains("message") && prev.classList.contains("user")) {
+                  prev.dataset.messageId = String(parsed);
+                  break;
+                }
+                prev = prev.previousElementSibling;
+              }
+            }
+          }
+        }
       }
       return json.answer || "(no response)";
     } catch (e) {
@@ -411,9 +481,9 @@ async function fetchStream(prompt, placeholder) {
   return fullText || null;
 }
 
-async function sendMessage(prompt, placeholder) {
+async function sendMessage(prompt, placeholder, userWrapper) {
   setStatus("Thinking...");
-  const streamResult = await fetchStream(prompt, placeholder);
+  const streamResult = await fetchStream(prompt, placeholder, userWrapper);
   if (streamResult !== null) {
     setStatus("Ready");
     await refreshHistoryAfterChat();
@@ -429,15 +499,61 @@ async function sendMessage(prompt, placeholder) {
   if (state.conversationId === -1) {
     requestBody.prompt = getSystemPromptForNewConversation();
   }
-  const response = await apiFetch("/chat", {
-    method: "POST",
-    body: JSON.stringify(requestBody),
-  });
+  let response;
+  try {
+    response = await apiFetch("/chat", {
+      method: "POST",
+      body: JSON.stringify(requestBody),
+    });
+  } catch (error) {
+    // If backend returned a JSON error with IDs, try to record them
+    const json = error && error.responseJson ? error.responseJson : null;
+    if (json) {
+      if (typeof json.conversationId === "number") {
+        state.conversationId = json.conversationId;
+      }
+      if (typeof json.userMessageId === "number") {
+        const parsed = Number(json.userMessageId);
+        if (Number.isFinite(parsed)) {
+          if (userWrapper) {
+            const wrapperEl = userWrapper.closest && userWrapper.closest(".message") ? userWrapper.closest(".message") : userWrapper;
+            try {
+              if (wrapperEl) wrapperEl.dataset.messageId = String(parsed);
+            } catch (e) {}
+          }
+        }
+      }
+    }
+    throw error;
+  }
   if (typeof response.conversationId === "number") {
     state.conversationId = response.conversationId;
   }
   if (typeof response.messageId === "number") {
     applyMessageIdToPlaceholder(placeholder, response.messageId);
+  }
+  if (typeof response.userMessageId === "number") {
+    const parsed = Number(response.userMessageId);
+    if (Number.isFinite(parsed)) {
+      if (userWrapper) {
+        const wrapperEl = userWrapper.closest && userWrapper.closest(".message") ? userWrapper.closest(".message") : userWrapper;
+        try {
+          if (wrapperEl) wrapperEl.dataset.messageId = String(parsed);
+        } catch (e) {}
+      } else if (placeholder) {
+        const msgNode = placeholder.closest && placeholder.closest(".message") ? placeholder.closest(".message") : null;
+        if (msgNode) {
+          let prev = msgNode.previousElementSibling;
+          while (prev) {
+            if (prev.classList && prev.classList.contains && prev.classList.contains("message") && prev.classList.contains("user")) {
+              prev.dataset.messageId = String(parsed);
+              break;
+            }
+            prev = prev.previousElementSibling;
+          }
+        }
+      }
+    }
   }
   setStatus("Ready");
   await refreshHistoryAfterChat();
