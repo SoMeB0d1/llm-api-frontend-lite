@@ -1,5 +1,10 @@
 package backend
 
+import (
+	"errors"
+	"os"
+)
+
 type Tool struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
@@ -9,7 +14,7 @@ type Tool struct {
 	Function func(params map[string]interface{}) (*Message, error) `json:"-"`
 }
 
-const searchString Tool = Tool{
+var searchString Tool = Tool{
 	Name:        "search",
 	Description: "Search for information on the internet.",
 	Parameters: map[string]interface{}{
@@ -17,10 +22,17 @@ const searchString Tool = Tool{
 	},
 	Required: []string{"query"},
 	Function: func(params map[string]interface{}) (*Message, error) {
+
 		query, ok := params["query"].(string)
 		if !ok {
-			return nil, ErrInvalidParameters
+			return nil, errors.New("invalid parameters")
 		}
-		// Implement your search logic here, e.g., call an external API or perform a database search.
+
+		searchURL, ok := os.Getenv("SEARCH_URL")
+		if !ok {
+			return nil, errors.New("SEARCH_URL not set in environment variables")
+		}
+
+		return nil, nil
 	},
 }
