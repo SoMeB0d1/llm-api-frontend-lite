@@ -33,10 +33,3 @@ type LLMContext struct {
 // 	Checksum string `json:"checksum,omitempty"`
 // 	Content  string `json:"content,omitempty"`
 // }
-
-type Thinking struct {
-	Summary    string   `json:"summary,omitempty"`
-	Steps      []string `json:"steps,omitempty"`
-	TokenCount int      `json:"tokenCount,omitempty"`
-	Redacted   bool     `json:"redacted,omitempty"`
-}
