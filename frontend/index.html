@@ -1,3 +1,14 @@
+<!--
+  index.html — LLM Lite 聊天主页面
+  提供完整的 AI 对话界面，包含侧边栏（用户信息、历史记录）、聊天区域、设置弹窗和确认弹窗。
+  依赖外部库：marked（Markdown 渲染）、KaTeX（数学公式渲染）。
+  入口 JS 模块：src/app.js
+
+  用户端数据存储：
+  所有用户状态（token、userId、userName、baseUrl、对话历史）均通过
+  localStorage 持久化存储，键名统一以 "llm." 为前缀，由 src/constants.js
+  中的 STORAGE_KEYS 集中管理。登录或 token 校验时写入，退出时清除。
+-->
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -18,17 +29,20 @@
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
-    <div class="bg-orbit"></div>
+    <!-- 背景装饰 -->
+    <div class="bg-orbit" aria-hidden="true"></div>
+    <!-- 应用主体 -->
     <div class="app">
-      <aside class="sidebar" id="sidebar">
-        <div class="brand">
+      <!-- 侧边栏 -->
+      <aside class="sidebar" id="sidebar" aria-label="Sidebar">
+        <header class="brand">
           <img class="brand-logo" src="resources/logo.png" alt="Logo" />
           <div class="brand-text">
             <div class="brand-title">LLM Lite</div>
             <div class="brand-subtitle">Frontend Desk</div>
           </div>
-        </div>
-        <div class="user-card">
+        </header>
+        <section class="user-card" aria-label="User">
           <div class="user-header">
             <div class="user-label">User</div>
             <button class="icon-button" id="hideSidebarBtn" type="button" aria-label="Hide sidebar">
@@ -39,16 +53,17 @@
           <button class="ghost-button" id="settingsBtn" type="button">
             设置
           </button>
-        </div>
+        </section>
         <button class="primary-button" id="newChatBtn" type="button">
           创建新对话
         </button>
-        <div class="history">
+        <nav class="history" aria-label="History">
           <div class="history-title">History</div>
           <div class="history-list" id="historyList"></div>
-        </div>
+        </nav>
       </aside>
-      <main class="chat" id="chatMain">
+      <!-- 聊天主区域 -->
+      <main class="chat" id="chatMain" aria-label="Conversation">
         <header class="chat-header">
           <button class="ghost-button menu-button" id="menuBtn" type="button">
             Menu
@@ -58,16 +73,23 @@
             <select class="model-select" id="modelSelect" aria-label="Model">
               <option value="deepseek-v4-flash">deepseek-v4-flash</option>
             </select>
-            <div class="status" id="statusText">Ready</div>
+            <div class="status" id="statusText" role="status" aria-live="polite">Ready</div>
           </div>
         </header>
         <section class="chat-body">
-          <div class="chat-history" id="chatHistory"></div>
+          <div
+            class="chat-history"
+            id="chatHistory"
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions text"
+          ></div>
           <form class="chat-input" id="chatForm">
             <textarea
               id="promptInput"
               placeholder="Ask something..."
               rows="2"
+              aria-label="Prompt"
             ></textarea>
             <button class="send-button" id="sendBtn" type="submit" aria-label="Send">
               <img src="resources/send.svg" alt="" />
@@ -77,6 +99,7 @@
       </main>
     </div>
 
+    <!-- 设置弹窗 -->
     <div class="modal" id="settingsModal" hidden>
       <div class="modal-card modal-card--settings" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
         <div class="settings-modal__header">
@@ -138,27 +161,31 @@
       </div>
     </div>
 
+    <!-- 回溯确认弹窗 -->
     <div class="modal" id="backModal" hidden>
       <div class="modal-card modal-card--confirm" role="dialog" aria-modal="true" aria-labelledby="backModalTitle">
         <h2 class="modal-title" id="backModalTitle">是否回溯至对话？</h2>
-        <div class="modal-actions">
+        <footer class="modal-actions">
           <button class="danger-button" id="backConfirmBtn" type="button">确认</button>
           <button class="ghost-button" id="backCancelBtn" type="button">取消</button>
-        </div>
+        </footer>
       </div>
     </div>
 
+    <!-- 重新生成确认弹窗 -->
     <div class="modal" id="regenerateModal" hidden>
       <div class="modal-card modal-card--confirm" role="dialog" aria-modal="true" aria-labelledby="regenerateModalTitle">
         <h2 class="modal-title" id="regenerateModalTitle">是否重新生成本消息？此后对话历史将舍弃！</h2>
-        <div class="modal-actions">
+        <footer class="modal-actions">
           <button class="danger-button" id="regenerateConfirmBtn" type="button">确认</button>
           <button class="ghost-button" id="regenerateCancelBtn" type="button">取消</button>
-        </div>
+        </footer>
       </div>
     </div>
 
+    <!-- 全局 toast 消息提示（顶部居中，1.8 秒自动消失，支持 error 红色 / success 绿色） -->
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <!-- 第三方库与应用入口 -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js"></script>
     <script

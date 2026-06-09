@@ -1,3 +1,13 @@
+/**
+ * login/styles.css — 登录页面样式
+ *
+ * 包含：
+ *   - CSS 变量（颜色、圆角、阴影）
+ *   - 登录卡片布局、表单、按钮样式
+ *   - toast 消息提示动画
+ *   - 响应式媒体查询（≤980px 时卡片变为单列）
+ */
+
 :root {
   color-scheme: light;
   --bg: #ffffff;

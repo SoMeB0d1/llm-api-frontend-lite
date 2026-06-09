@@ -1,3 +1,13 @@
+/**
+ * login.js — 登录页面逻辑
+ *
+ * 功能：
+ *   - 加载缓存的基础 URL
+ *   - 提交登录表单 → POST /auth/login
+ *   - 根据后端返回的 user_exist / psw_right 展示对应提示
+ *   - 登录成功后将 token、userId、userName 存入 localStorage 并跳转到主页面
+ */
+
 const STORAGE_KEYS = {
   token: "llm.token",
   userId: "llm.userId",
@@ -18,6 +28,7 @@ const state = {
   baseUrl: "",
 };
 
+/** 去除 URL 末尾的 "/" */
 function normalizeBaseUrl(url) {
   if (!url) {
     return "";
@@ -25,6 +36,7 @@ function normalizeBaseUrl(url) {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
+/** 显示登录页面的临时提示消息 */
 function showToast(message) {
   if (!elements.toast) {
     return;
@@ -37,6 +49,7 @@ function showToast(message) {
   }, 1800);
 }
 
+/** 切换提交按钮的 loading/正常状态 */
 function setSubmitting(submitting) {
   if (!elements.submit) {
     return;
@@ -55,6 +68,7 @@ function setSubmitting(submitting) {
   }
 }
 
+/** POST /auth/login，返回解析后的 JSON */
 async function login(username, password) {
   const response = await fetch(`${state.baseUrl}/auth/login`, {
     method: "POST",
@@ -77,17 +91,20 @@ async function login(username, password) {
   return data;
 }
 
+/** 将认证信息写入 localStorage */
 function saveAuth(data, userId, userName) {
   localStorage.setItem(STORAGE_KEYS.token, data.new_token || "");
   localStorage.setItem(STORAGE_KEYS.userId, userId != null ? Number(userId) : "");
   localStorage.setItem(STORAGE_KEYS.userName, userName || "");
 }
 
+/** 从 localStorage 加载并标准化基础 URL */
 function loadBaseUrl() {
   const cached = localStorage.getItem(STORAGE_KEYS.baseUrl) || "";
   state.baseUrl = normalizeBaseUrl(cached);
 }
 
+/** 绑定登录表单提交事件 */
 function init() {
   loadBaseUrl();
 

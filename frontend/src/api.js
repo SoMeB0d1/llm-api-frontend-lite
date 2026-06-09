@@ -1,3 +1,15 @@
+/**
+ * api.js — API 通信模块
+ *
+ * 封装与后端 HTTP 接口的所有通信逻辑，包括：
+ *   - apiFetch：带超时、自动附加 Bearer token 的通用请求封装
+ *   - validateToken：校验/刷新认证令牌
+ *   - fetchModelsIfAllowed：获取可用模型列表并更新下拉框
+ *   - loadHistory / loadConversation：加载对话历史
+ *   - sendMessage / fetchStream：发送消息（优先流式 SSE，自动回退到 JSON）
+ *   - sendBack：回溯到指定消息
+ */
+
 import { elements } from "./elements.js";
 import { state, setUserId, setNewChatState, saveAuth } from "./state.js";
 import { renderMarkdown } from "./markdown.js";
@@ -7,10 +19,12 @@ import { applyRootSettingsVisibility, getSystemPromptForNewConversation } from "
 import { setStatus, showToast } from "./ui.js";
 import { STORAGE_KEYS } from "./constants.js";
 
+/** 服务器错误通用处理：显示 toast 提示管理员 */
 function handleServerError() {
   showToast("出现问题，请联系管理员");
 }
 
+/** 从 state.history 中查找指定对话的标题，未找到时返回空字符串 */
 function getConversationTitle(conversationId) {
   const target = Number(conversationId);
   if (!Number.isFinite(target)) {
@@ -22,6 +36,7 @@ function getConversationTitle(conversationId) {
   return entry?.title || "";
 }
 
+/** 聊天完成后刷新历史列表，若新对话标题为 "new_conversation" 则请求后端生成标题 */
 async function refreshHistoryAfterChat() {
   await loadHistory();
   if (
@@ -45,12 +60,14 @@ async function refreshHistoryAfterChat() {
   }
 }
 
+/** 创建一个带超时的 AbortController，超时后自动 abort */
 function getTimeoutSignal(timeoutMs) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   return { controller, timeout };
 }
 
+/** 将 messageId 写入占位元素所在 .message 容器的 data-message-id 属性 */
 function applyMessageIdToPlaceholder(placeholder, messageId) {
   const numericId = Number(messageId);
   if (!Number.isFinite(numericId) || !placeholder) {
@@ -62,6 +79,15 @@ function applyMessageIdToPlaceholder(placeholder, messageId) {
   }
 }
 
+/**
+ * 通用 API 请求封装
+ * - 自动附加 Content-Type、Bearer token
+ * - 默认 20 秒超时
+ * - 500 错误弹出管理员提示，其他错误截取 message
+ * @param {string} path 接口路径
+ * @param {object} [options] fetch 选项
+ * @returns {Promise<object>} 解析后的 JSON 响应
+ */
 async function apiFetch(path, options = {}) {
   const timeoutMs = 20000;
   const { controller, timeout } = getTimeoutSignal(timeoutMs);
@@ -108,9 +134,11 @@ async function apiFetch(path, options = {}) {
   return response.json();
 }
 
+// 模型列表请求的防抖控制
 let lastModelFetchAt = 0;
 let modelFetchInFlight = false;
 
+/** 标准化 /v1/models 响应，提取 id 字符串数组 */
 function normalizeModelList(data) {
   if (data && Array.isArray(data.data)) {
     return data.data
@@ -120,6 +148,7 @@ function normalizeModelList(data) {
   return [];
 }
 
+/** 将模型列表填充到 modelSelect 下拉框，优先保持当前选中的模型 */
 function applyModelOptions(models) {
   if (!elements.modelSelect) {
     return;
@@ -149,6 +178,7 @@ function applyModelOptions(models) {
   }
 }
 
+/** 获取可用模型列表，带 1 秒防抖与并发飞行中的防护 */
 async function fetchModelsIfAllowed() {
   if (modelFetchInFlight) {
     return;
@@ -174,6 +204,11 @@ async function fetchModelsIfAllowed() {
   }
 }
 
+/**
+ * 校验当前 token — POST /auth/token
+ * 校验通过后同步服务端返回的用户信息并持久化
+ * @returns {Promise<boolean>}
+ */
 async function validateToken() {
   if (!state.token) {
     return false;
@@ -214,6 +249,7 @@ async function validateToken() {
   }
 }
 
+/** 加载对话历史列表并渲染到侧边栏（POST /history），失败时显示 "History unavailable" */
 async function loadHistory() {
   await new Promise((resolve) => setTimeout(resolve, 0));
   renderHistory(loadConversation);
@@ -266,6 +302,11 @@ async function loadHistory() {
   renderHistory(loadConversation);
 }
 
+/**
+ * 加载指定对话的全部消息到聊天区（POST /history/topic），
+ * 补齐缺失的 assistant 消息并同步模型选择
+ * @param {number} conversationId 对话 ID
+ */
 async function loadConversation(conversationId) {
   resetChat();
   setStatus("Loading conversation...");
@@ -328,6 +369,16 @@ async function loadConversation(conversationId) {
   }
 }
 
+/**
+ * 流式获取 LLM 回复
+ * - Content-Type 为 text/event-stream 时，逐 chunk 实时渲染 Markdown
+ * - 否则解析 JSON 回退，返回 answer 文本
+ * - 从响应头/JSON 中提取 conversationId、messageId、userMessageId
+ * @param {string} prompt 用户消息文本
+ * @param {HTMLElement} placeholder assistant 消息的占位 bubble 元素
+ * @param {HTMLElement} [userWrapper] 用户消息容器元素
+ * @returns {Promise<string|null>} 累积的完整回复文本，失败返回 null
+ */
 async function fetchStream(prompt, placeholder, userWrapper) {
   const timeoutMs = 120000;
   const controller = new AbortController();
@@ -481,6 +532,14 @@ async function fetchStream(prompt, placeholder, userWrapper) {
   return fullText || null;
 }
 
+/**
+ * 发送用户消息的顶层入口：
+ * 先尝试 fetchStream 流式请求，失败后改用 apiFetch 非流式重试
+ * @param {string} prompt 用户消息文本
+ * @param {HTMLElement} placeholder assistant 占位 bubble 元素
+ * @param {HTMLElement} [userWrapper] 用户消息容器元素
+ * @returns {Promise<string>} 最终回复文本
+ */
 async function sendMessage(prompt, placeholder, userWrapper) {
   setStatus("Thinking...");
   const streamResult = await fetchStream(prompt, placeholder, userWrapper);
@@ -560,6 +619,11 @@ async function sendMessage(prompt, placeholder, userWrapper) {
   return response.answer || "(no response)";
 }
 
+/**
+ * 回溯到指定消息：POST /back，删除该消息之后的所有消息
+ * @param {number} messageId 要回溯到的消息 ID
+ * @returns {Promise<object>} 后端返回的 JSON
+ */
 async function sendBack(messageId) {
   return apiFetch("/back", {
     method: "POST",

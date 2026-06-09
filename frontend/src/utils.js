@@ -1,9 +1,21 @@
+/**
+ * utils.js — 工具函数模块
+ *
+ * 纯逻辑辅助函数：
+ *   - formatSummary：提取历史条目的显示标题
+ *   - normalizeHistoryTimestamp：将各种格式的时间戳转换为毫秒数值
+ *   - sortHistoryByTime：按最后编辑时间降序排列历史记录
+ *   - handleInvalidUserId：检测到无效 userId 时跳转登录页
+ */
+
 import { STORAGE_KEYS } from "./constants.js";
 
+/** 提取历史条目的显示标题（title > summary > "(no title)"） */
 function formatSummary(item) {
   return item.title || item.summary || "(no title)";
 }
 
+/** 将各种格式的历史时间戳转换为毫秒数值 */
 function normalizeHistoryTimestamp(value) {
   if (typeof value === "number") {
     return value;
@@ -24,6 +36,7 @@ function normalizeHistoryTimestamp(value) {
   return 0;
 }
 
+/** 按最后编辑时间降序排列历史记录 */
 function sortHistoryByTime(items) {
   items.sort(
     (a, b) =>
@@ -32,6 +45,7 @@ function sortHistoryByTime(items) {
   );
 }
 
+/** 检测到无效 userId 时清空凭据并跳转登录页 */
 function handleInvalidUserId() {
   localStorage.removeItem(STORAGE_KEYS.userId);
   localStorage.removeItem(STORAGE_KEYS.token);

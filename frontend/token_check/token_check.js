@@ -1,3 +1,12 @@
+/**
+ * token_check.js — Token 校验入口页面
+ *
+ * 应用启动时首先加载此页面，验证 localStorage 中的 token 是否有效：
+ *   - POST /auth/token 校验 token
+ *   - 校验通过 → 跳转 /index.html（主页面）
+ *   - 校验失败或网络错误 → 跳转 /login/login.html（登录页）
+ */
+
 const STORAGE_KEYS = {
   token: "llm.token",
   userId: "llm.userId",
@@ -5,6 +14,7 @@ const STORAGE_KEYS = {
   baseUrl: "llm.baseUrl",
 };
 
+/** 去除 URL 末尾的 "/" */
 function normalizeBaseUrl(url) {
   if (!url) {
     return "";
@@ -12,6 +22,11 @@ function normalizeBaseUrl(url) {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
+/**
+ * 校验 token：POST /auth/token
+ * 成功时更新 localStorage 中的 token/userId/userName 并跳转主页面
+ * 失败时跳转登录页
+ */
 async function checkToken() {
   const token = localStorage.getItem(STORAGE_KEYS.token) || "";
   const baseUrl = normalizeBaseUrl(
@@ -46,7 +61,7 @@ async function checkToken() {
       return;
     }
   } catch (error) {
-    // Fall through to login.
+    // token 校验失败或网络错误，跳转登录页
   }
   window.location.href = "/login/login.html";
 }

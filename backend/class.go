@@ -1,4 +1,4 @@
-package backend
+package main
 
 type LLMContext struct {
 	Prompt   string     `json:"prompt"`

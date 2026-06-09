@@ -1,10 +1,25 @@
+/**
+ * ui.js — 通用 UI 工具模块
+ *
+ * 提供与 DOM 无关的 UI 辅助函数：
+ *   - setStatus：更新状态栏文本
+ *   - setSendButtonState：切换发送按钮的 loading/正常状态
+ *   - isMobile：判断当前是否为移动端视口 (< 800px)
+ *   - showToast：显示临时消息提示（支持 error/success 变体）
+ *   - toggleModal：显示/隐藏模态弹窗
+ *   - copyToClipboard：复制文本到剪贴板（优先异步 API，回退 execCommand）
+ *   - markActionDone：临时标记操作按钮为完成状态（1 秒自动恢复）
+ */
+
 import { elements } from "./elements.js";
 import { SEND_ICONS } from "./constants.js";
 
+/** 更新底部状态栏文本 */
 function setStatus(text) {
   elements.statusText.textContent = text;
 }
 
+/** 切换发送按钮的 loading/正常状态（图标 + 禁用态） */
 function setSendButtonState(loading) {
   if (!elements.sendBtn) {
     return;
@@ -16,10 +31,16 @@ function setSendButtonState(loading) {
   elements.sendBtn.disabled = loading;
 }
 
+/** 判断当前是否为移动端视口（宽度 < 800px） */
 function isMobile() {
   return window.innerWidth < 800;
 }
 
+/**
+ * 显示临时消息提示
+ * @param {string} message 消息文本
+ * @param {string} [variant="error"] 样式变体："error" | "success"
+ */
 function showToast(message, variant = "error") {
   if (!elements.toast) {
     return;
@@ -36,6 +57,11 @@ function showToast(message, variant = "error") {
   }, 1800);
 }
 
+/**
+ * 显示/隐藏模态弹窗
+ * @param {HTMLElement} modal 弹窗元素
+ * @param {boolean} show true 显示，false 隐藏
+ */
 function toggleModal(modal, show) {
   if (!modal) {
     return;
@@ -43,6 +69,10 @@ function toggleModal(modal, show) {
   modal.hidden = !show;
 }
 
+/**
+ * 复制文本到剪贴板（优先 navigator.clipboard，回退 execCommand）
+ * 复制成功后显示 "已复制" toast
+ */
 async function copyToClipboard(text) {
   if (!text) {
     return;
@@ -67,6 +97,7 @@ async function copyToClipboard(text) {
   }
 }
 
+/** 临时标记操作按钮为完成状态：图标变对勾 → 禁点 1 秒 → 恢复原状 */
 function markActionDone(button) {
   if (!button) {
     return;

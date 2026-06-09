@@ -1,4 +1,4 @@
-package backend
+package main
 
 import (
 	"encoding/json"
@@ -237,7 +237,7 @@ var search Tool = Tool{
 
 		//post request to searchURL with text and limit as parameters, and return the response
 		base := strings.TrimRight(searchURL, "/")
-		endpoint := base + "/bing/search?"
+		endpoint := base + "/search?"
 		endpoint += "text=" + url.QueryEscape(text)
 		if region != "" {
 			endpoint += "&region=" + url.QueryEscape(region)

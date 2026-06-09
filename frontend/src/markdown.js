@@ -1,5 +1,15 @@
+/**
+ * markdown.js — Markdown 渲染模块
+ *
+ * 提供文本到 HTML 的转换功能：
+ *   - renderMarkdown：利用 marked 库渲染 Markdown（包括自定义代码块和复制按钮）
+ *   - renderPlainText：仅做 HTML 转义 + 换行处理，不涉及 Markdown 语法
+ *   - setupMarkedRenderer：配置 marked 渲染器（仅首次调用时执行）
+ */
+
 let markedReady = false;
 
+/** HTML 字符转义，防止 XSS */
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -9,6 +19,7 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+/** 初始化 marked 渲染器（仅一次），注册自定义代码块渲染 + 复制按钮 */
 function setupMarkedRenderer() {
   if (markedReady || !window.marked) {
     return;
@@ -43,6 +54,10 @@ function setupMarkedRenderer() {
   markedReady = true;
 }
 
+/**
+ * 渲染 Markdown 文本为 HTML（需要 marked 库已加载）
+ * 若 marked 不可用则回退为纯文本 HTML 转义
+ */
 function renderMarkdown(text) {
   if (window.marked) {
     setupMarkedRenderer();
@@ -51,6 +66,7 @@ function renderMarkdown(text) {
   return escapeHtml(text).replace(/\n/g, "<br>");
 }
 
+/** 渲染为纯文本 HTML（仅转义 + 换行，不解析 Markdown） */
 function renderPlainText(text) {
   return escapeHtml(text).replace(/\n/g, "<br>");
 }

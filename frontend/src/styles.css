@@ -1,3 +1,16 @@
+/**
+ * styles.css — 主应用样式表
+ *
+ * 包含：
+ *   - CSS 变量与 Light 主题
+ *   - 全局重置与排版
+ *   - 布局（侧边栏 + 聊天区）/ Flex 网格 / 消息气泡
+ *   - 按钮系统（primary / icon / ghost / danger）
+ *   - Markdown 内容样式（代码块、表格、引用等）
+ *   - 设置弹窗、模态确认框、toast 消息
+ *   - 响应式断点（≤799px 移动端 / ≥800px 桌面端）
+ */
+
 :root {
   color-scheme: light;
   --bg: #ffffff;

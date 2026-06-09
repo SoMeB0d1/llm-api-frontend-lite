@@ -1,9 +1,19 @@
+/**
+ * message.js — 消息渲染模块
+ *
+ * 负责聊天历史、消息气泡和历史列表的 DOM 渲染：
+ *   - renderMessage：创建一条 user/assistant 消息气泡（含操作按钮、数学渲染）
+ *   - renderHistory：将 state.history 渲染到侧边栏历史列表
+ *   - resetChat：清空聊天区域并重置为新对话状态
+ */
+
 import { elements } from "./elements.js";
 import { renderMarkdown, renderPlainText } from "./markdown.js";
 import { copyToClipboard, markActionDone } from "./ui.js";
 import { formatSummary } from "./utils.js";
 import { state, setNewChatState } from "./state.js";
 
+/** 创建一个消息操作按钮（SVG 图标 + label + 可选点击回调） */
 function createActionButton(icon, label, onClick) {
   const button = document.createElement("button");
   button.className = "action-button";
@@ -20,6 +30,13 @@ function createActionButton(icon, label, onClick) {
   return button;
 }
 
+/**
+ * 在聊天区域渲染一条消息
+ * @param {string} role "user" | "assistant"
+ * @param {string} content 消息文本
+ * @param {number|string} [messageId] 可选的数据库消息 ID
+ * @returns {HTMLElement} 消息的 .bubble 元素
+ */
 function renderMessage(role, content, messageId) {
   const wrapper = document.createElement("div");
   wrapper.className = `message ${role}`;
@@ -81,6 +98,10 @@ function renderMessage(role, content, messageId) {
   return bubble;
 }
 
+/**
+ * 渲染侧边栏对话历史列表
+ * @param {function} onSelectConversation 点击条目时的回调（传入 conversation_id）
+ */
 function renderHistory(onSelectConversation) {
   elements.historyList.innerHTML = "";
   if (!state.history.length) {
@@ -105,6 +126,7 @@ function renderHistory(onSelectConversation) {
   });
 }
 
+/** 清空聊天区域，重置 conversationId 为 -1，切换到新对话状态 */
 function resetChat() {
   elements.chatHistory.innerHTML = "";
   state.conversationId = -1;
