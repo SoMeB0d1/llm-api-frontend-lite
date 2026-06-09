@@ -4,11 +4,11 @@ import "fmt"
 
 func TestSearch() {
 	params := map[string]interface{}{
-		"text":   "王宗琪",
-		"limit":  5,
-		"region": "CN",
-		// "begin_date": "",
-		// "end_date":   "",
+		"text":       "王宗琪",
+		"limit":      5,
+		"region":     "CN",
+		"begin_date": 20240205,
+		"end_date":   20250105,
 		// "start":      "",
 		// "site":       "",
 	}

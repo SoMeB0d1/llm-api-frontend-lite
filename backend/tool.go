@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -192,13 +193,13 @@ var search Tool = Tool{
 				}
 				return returnMessage, nil
 			}
-			begin_month := begin_date / 10000 % 100
+			begin_month := begin_date % 10000 / 100
 			begin_day := begin_date % 100
-			end_month := end_date / 10000 % 100
+			end_month := end_date % 10000 / 100
 			end_day := end_date % 100
 
 			if begin_month < 1 || begin_month > 12 || end_month < 1 || end_month > 12 {
-				returnMessage, error := fillFailedMessage("search", false, "parameters 'begin_date' and 'end_date' should have valid month value (1-12)")
+				returnMessage, error := fillFailedMessage("search", false, "parameters 'begin_date' and 'end_date' should have valid month value (1-12) and year value")
 				if error != nil {
 					return nil, error
 				}
@@ -254,7 +255,7 @@ var search Tool = Tool{
 			endpoint += "&start=" + fmt.Sprintf("%d", start)
 		}
 		if begin_date != 0 && end_date != 0 {
-			endpoint += fmt.Sprintf("%d..%d", begin_date, end_date)
+			endpoint += fmt.Sprintf("&date=%d..%d", begin_date, end_date)
 		}
 		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Get(endpoint)
@@ -282,6 +283,7 @@ var search Tool = Tool{
 			if err != nil {
 				return nil, err
 			}
+			log.Printf("ERROR: %s: %s", endpoint, resp.Status)
 			return returnMessage, nil
 		}
 
