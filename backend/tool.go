@@ -22,6 +22,13 @@ type Tool struct {
 	getJson  func() string                                         `json:"-"`
 }
 
+type searchResult struct {
+	Rank    int    `json:"rank"`
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	Snippet string `json:"snippet"`
+}
+
 func fillFailedMessage(toolName string, internal bool, errorMessage string) (*Message, error) {
 	if internal {
 		errorMessage = "tool internal error: " + errorMessage
@@ -278,13 +285,6 @@ var search Tool = Tool{
 			return returnMessage, nil
 		}
 
-		type searchResult struct {
-			Rank    int    `json:"rank"`
-			Title   string `json:"title"`
-			URL     string `json:"url"`
-			Snippet string `json:"snippet"`
-		}
-
 		type searchResponse struct {
 			Results []searchResult `json:"results"`
 			Result  []searchResult `json:"result"`
@@ -321,5 +321,8 @@ var search Tool = Tool{
 		returnMessage.Content = string(content)
 
 		return &returnMessage, nil
+	},
+	getJson: func() string {
+		return `{"type":"function","function":{"name":"search","description":"Search for information on the internet.","parameters":{"type":"object","properties":{"text":{"type":"string","description":"The search text."},"limit":{"type":"integer","description":"The number of search results to return (optional, default is 10)."},"region":{"type":"string","description":"The region of the search results (optional, default is 'CN', choose from 'CN', 'GB', 'US', 'KR', 'RU', 'JP').","enum":["CN","GB","US","KR","RU","JP"]},"begin_date":{"type":"integer","description":"The date of the search results (optional, YYYYMMDD)."},"end_date":{"type":"integer","description":"The date of the search results (optional, YYYYMMDD)."},"start":{"type":"integer","description":"The starting index of the search results (optional)."},"site":{"type":"string","description":"The site to search (optional)."}},"required":["text"]}}}`
 	},
 }
