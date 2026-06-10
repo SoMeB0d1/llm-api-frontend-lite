@@ -14,8 +14,8 @@ func TestSearch() {
 	}
 	returnMessage, err := search.Function(params)
 	if err != nil {
-		fmt.Println("Error:", err)
+		fmt.Println("ERROR:", err)
 		return
 	}
-	fmt.Println(returnMessage.Content)
+	fmt.Sprint(returnMessage.Content)
 }

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -283,7 +282,7 @@ var search Tool = Tool{
 			if err != nil {
 				return nil, err
 			}
-			log.Printf("ERROR: %s: %s", endpoint, resp.Status)
+			backendlog.writeLog(fmt.Sprintf("ERROR: %s: %s", endpoint, resp.Status))
 			return returnMessage, nil
 		}
 
@@ -321,6 +320,7 @@ var search Tool = Tool{
 			return rMessage, nil
 		}
 		returnMessage.Content = string(content)
+		backendlog.writeLog(fmt.Sprintf("INFO: search tool calling: return %s", returnMessage.Content))
 
 		return &returnMessage, nil
 	},
